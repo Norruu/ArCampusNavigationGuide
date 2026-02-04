@@ -25,11 +25,11 @@ object CampusDataProvider {
                 name = "Main Library",
                 shortName = "Library",
                 description = "Central campus library",
-                location = CampusLocation("lib", 37.4280, -122.1700),
+                location = CampusLocation("lib", 9.854278907693391, 122.88931068697471),
                 type = BuildingType.LIBRARY,
                 entrances = listOf(
-                    CampusLocation("lib_entrance_main", 37.4278, -122.1698),
-                    CampusLocation("lib_entrance_side", 37.4281, -122.1702)
+                    CampusLocation("lib_entrance_main", 9.854278907693391, 122.88931068697471),
+                    CampusLocation("lib_entrance_side", 9.854278907693391, 122.88931068697471)
                 )
             ))
             .addBuilding(Building(

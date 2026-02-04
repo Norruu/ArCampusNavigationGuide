@@ -12,49 +12,12 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Search Bar -->
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/searchCard"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp"
-        android:layout_marginTop="48dp"
-        app:cardCornerRadius="12dp"
-        app:cardElevation="8dp"
-        app:strokeWidth="0dp">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingHorizontal="16dp">
-
-            <ImageView
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/ic_search"
-                android:contentDescription="Search"
-                app:tint="?attr/colorOnSurfaceVariant" />
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:layout_weight="1"
-                android:text="Search campus..."
-                android:textColor="?attr/colorOnSurfaceVariant"
-                android:textSize="17sp" />
-
-        </LinearLayout>
-
-    </com.google.android.material.card.MaterialCardView>
-
     <!-- FABs -->
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="end|center_vertical"
+        android:layout_gravity="end|top|right"
+        android:layout_marginTop="55dp"
         android:layout_marginEnd="16dp"
         android:orientation="vertical">
 
@@ -83,6 +46,18 @@
             app:tint="?attr/colorOnSurface" />
 
         <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/fabSatelliteView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:contentDescription="Satellite View"
+            android:src="@drawable/ic_compass"
+            app:backgroundTint="?attr/colorSurface"
+            app:fabCustomSize="48dp"
+            app:maxImageSize="24dp"
+            app:tint="?attr/colorOnSurface" />
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/fabArMode"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -90,8 +65,8 @@
             android:src="@drawable/ic_ar"
             android:visibility="gone"
             app:backgroundTint="?attr/colorPrimary"
-            app:fabCustomSize="56dp"
-            app:maxImageSize="28dp"
+            app:fabCustomSize="48dp"
+            app:maxImageSize="24dp"
             app:tint="@android:color/white"
             tools:visibility="visible" />
 
@@ -104,7 +79,8 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
         android:visibility="gone"
-        app:cardCornerRadius="24dp"
+        app:cornerSizeTopLeft="24dp"
+        app:cornerSizeTopRight="24dp"
         app:cardElevation="16dp"
         app:strokeWidth="0dp"
         tools:visibility="visible">

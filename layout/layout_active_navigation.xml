@@ -30,7 +30,7 @@
                 android:layout_width="56dp"
                 android:layout_height="56dp"
                 android:src="@drawable/ic_turn_left"
-                android:tint="@color/white"
+                app:tint="@color/white"
                 tools:ignore="ContentDescription" />
 
             <!-- Instruction Text -->
