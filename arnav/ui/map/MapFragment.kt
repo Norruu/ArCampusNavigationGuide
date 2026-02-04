@@ -28,8 +28,11 @@ import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
+import org.osmdroid.util.BoundingBox
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
+import org.osmdroid.tileprovider.tilesource.XYTileSource
+
 
 @AndroidEntryPoint
 class MapFragment : Fragment() {
@@ -56,6 +59,7 @@ class MapFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         setupMap()
+        setupCampusMap(mapView)
         setupUI()
         observeViewModel()
     }
@@ -68,12 +72,31 @@ class MapFragment : Fragment() {
             setMultiTouchControls(true)
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
             controller.setZoom(17.0)
-            controller.setCenter(GeoPoint(37.4275, -122.1697))
+            controller.setCenter(GeoPoint(9.8515, 122.8867))
             minZoomLevel = 14.0
             maxZoomLevel = 20.0
         }
 
         setupLocationOverlay()
+    }
+
+    fun setupCampusMap(mapView: MapView) {
+        val campusNorth = 9.857365352521331
+        val campusSouth = 9.843818207123961
+        val campusEast = 122.89307299341952
+        val campusWest = 122.88305672555643
+        val defaultZoom = 17.5
+
+        val boundingBox = BoundingBox(campusNorth, campusEast, campusSouth, campusWest)
+        mapView.setScrollableAreaLimitDouble(boundingBox)
+        mapView.setMinZoomLevel(14.0)
+        mapView.setMaxZoomLevel(20.0)
+        mapView.setHorizontalMapRepetitionEnabled(false)
+        mapView.setVerticalMapRepetitionEnabled(false)
+        val centerLat = (campusNorth + campusSouth) / 2
+        val centerLon = (campusEast + campusWest) / 2
+        mapView.controller.setZoom(defaultZoom)
+        mapView.controller.setCenter(org.osmdroid.util.GeoPoint(centerLat, centerLon))
     }
 
     private fun setupLocationOverlay() {
@@ -90,9 +113,6 @@ class MapFragment : Fragment() {
     }
 
     private fun setupUI() {
-        binding.searchCard.setOnClickListener {
-            viewModel.openSearch()
-        }
 
         binding.fabRecenter.setOnClickListener {
             myLocationOverlay?.myLocation?.let { location ->
@@ -103,6 +123,10 @@ class MapFragment : Fragment() {
 
         binding.fabCompass.setOnClickListener {
             mapView.controller.animateTo(mapView.mapCenter, 17.0, 500, 0f)
+        }
+
+        binding.fabSatelliteView.setOnClickListener {
+            viewModel.switchToARMode()
         }
 
         binding.fabArMode.setOnClickListener {
@@ -370,3 +394,4 @@ class MapFragment : Fragment() {
         _binding = null
     }
 }
+

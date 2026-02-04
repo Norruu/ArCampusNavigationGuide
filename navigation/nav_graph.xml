@@ -24,6 +24,9 @@
         <action
             android:id="@+id/action_mapFragment_to_buildingDetailFragment"
             app:destination="@id/buildingDetailFragment" />
+        <action
+            android:id="@+id/action_mapFragment_to_settingsFragment"
+            app:destination="@id/settingsFragment" />
 
     </fragment>
 
@@ -71,13 +74,6 @@
             android:defaultValue="@null" />
 
     </fragment>
-
-    <!-- QR Scanner Fragment -->
-    <fragment
-        android:id="@+id/qrScannerFragment"
-        android:name="com.campus.arnav.ui.qr.QRScannerFragment"
-        android:label="QR Scanner"
-        tools:layout="@layout/fragment_qr_scanner" />
 
     <!-- Settings Fragment -->
     <fragment
