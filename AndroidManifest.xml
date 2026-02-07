@@ -2,17 +2,30 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Permissions -->
+    <!-- CRITICAL: OSMDroid requires these permissions for tile caching -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- For Android 10+ (API 29+) - OSMDroid needs this to save tiles -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!-- Location permissions -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- Camera permission -->
     <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Vibration -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- Camera feature -->
     <uses-feature
         android:name="android.hardware.camera"
-        android:required="true" />
+        android:required="false" />
     <uses-feature
         android:name="android.hardware.camera.autofocus"
         android:required="false" />
@@ -20,7 +33,7 @@
     <!-- AR feature -->
     <uses-feature
         android:name="android.hardware.camera.ar"
-        android:required="true" />
+        android:required="false" />
 
     <!-- Location feature -->
     <uses-feature
@@ -37,19 +50,21 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.CampusARNav"
+        android:requestLegacyExternalStorage="true"
+        android:usesCleartextTraffic="true"
         tools:targetApi="31">
 
         <!-- ARCore metadata -->
         <meta-data
             android:name="com.google.ar.core"
-            android:value="required" />
+            android:value="optional" />
 
         <!-- Main Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:theme="@style/Theme.CampusARNav.Splash"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="adjustPan|stateHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

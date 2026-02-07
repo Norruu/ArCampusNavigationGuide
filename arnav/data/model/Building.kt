@@ -51,7 +51,6 @@ enum class RoomType {
     OFFICE,
     LAB,
     RESTROOM,
-    ELEVATOR,
     STAIRS,
     ENTRANCE
 }

@@ -2,6 +2,7 @@
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@android:color/black">
@@ -10,10 +11,25 @@
     <androidx.camera.view.PreviewView
         android:id="@+id/previewView"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- Scan Overlay -->
+    <!-- Semi-transparent overlay for better visibility -->
     <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#40000000"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Scan Area Indicator -->
+    <View
+        android:id="@+id/scanAreaIndicator"
         android:layout_width="250dp"
         android:layout_height="250dp"
         android:background="@drawable/bg_qr_scanner_overlay"
@@ -24,14 +40,32 @@
 
     <!-- Instructions -->
     <TextView
+        android:id="@+id/tvInstructions"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="32dp"
         android:text="Point camera at QR code"
         android:textColor="@android:color/white"
         android:textSize="16sp"
+        android:textStyle="bold"
+        android:shadowColor="@android:color/black"
+        android:shadowRadius="4"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Back Button -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabBack"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:contentDescription="Back"
+        android:src="@drawable/ic_arrow_back"
+        app:backgroundTint="@android:color/white"
+        app:fabSize="mini"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:tint="@android:color/black" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

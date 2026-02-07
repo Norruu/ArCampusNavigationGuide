@@ -8,6 +8,9 @@ import com.campus.arnav.data.model.Route
 import com.campus.arnav.data.repository.CampusRepository
 import com.campus.arnav.data.repository.LocationRepository
 import com.campus.arnav.data.repository.NavigationRepository
+import com.campus.arnav.domain.pathfinding.CampusPathfinding
+import com.campus.arnav.domain.pathfinding.RouteOptions
+import com.campus.arnav.domain.pathfinding.RouteResult
 import com.campus.arnav.ui.navigation.NavigationState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -18,14 +21,18 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.osmdroid.util.GeoPoint
 import javax.inject.Inject
 
 @HiltViewModel
 class MapViewModel @Inject constructor(
     private val campusRepository: CampusRepository,
     private val locationRepository: LocationRepository,
-    private val navigationRepository: NavigationRepository
+    private val navigationRepository: NavigationRepository,
+    private val campusPathfinding: CampusPathfinding  // NEW: Integrated pathfinding
 ) : ViewModel() {
+
+    // ============== EXISTING STATE FLOWS ==============
 
     private val _buildings = MutableStateFlow<List<Building>>(emptyList())
     val buildings: StateFlow<List<Building>> = _buildings.asStateFlow()
@@ -51,13 +58,45 @@ class MapViewModel @Inject constructor(
     private val _uiEvent = MutableSharedFlow<MapUiEvent>()
     val uiEvent: SharedFlow<MapUiEvent> = _uiEvent.asSharedFlow()
 
+    // ============== NEW STATE FLOWS FOR PATHFINDING ==============
+
+    private val _routePoints = MutableStateFlow<List<GeoPoint>?>(null)
+    val routePoints: StateFlow<List<GeoPoint>?> = _routePoints.asStateFlow()
+
+    private val _isPathfindingReady = MutableStateFlow(false)
+    val isPathfindingReady: StateFlow<Boolean> = _isPathfindingReady.asStateFlow()
+
+    private val _useSmartPathfinding = MutableStateFlow(true)  // Toggle for using A* vs simple routing
+    val useSmartPathfinding: StateFlow<Boolean> = _useSmartPathfinding.asStateFlow()
+
+    // ============== EXISTING VARIABLES ==============
+
     private var locationJob: Job? = null
     private var navigationJob: Job? = null
     private var currentStepIndex = 0
 
+    // ============== INITIALIZATION ==============
+
     init {
         loadBuildings()
         startLocationUpdates()
+        initializePathfinding()  // NEW: Initialize pathfinding system
+    }
+
+    /**
+     * NEW: Initialize the pathfinding system with campus paths
+     */
+    private fun initializePathfinding() {
+        viewModelScope.launch {
+            try {
+                campusPathfinding.initializeFromCampusPaths()
+                _isPathfindingReady.value = true
+                android.util.Log.d("MapViewModel", "Pathfinding initialized successfully")
+            } catch (e: Exception) {
+                android.util.Log.e("MapViewModel", "Failed to initialize pathfinding", e)
+                _uiEvent.emit(MapUiEvent.ShowError("Failed to initialize pathfinding"))
+            }
+        }
     }
 
     private fun loadBuildings() {
@@ -87,11 +126,16 @@ class MapViewModel @Inject constructor(
         }
     }
 
+    // ============== ENHANCED ROUTE CALCULATION ==============
+
     fun onBuildingSelected(building: Building) {
         _selectedBuilding.value = building
         calculateRouteToBuilding(building)
     }
 
+    /**
+     * ENHANCED: Now uses smart pathfinding if enabled
+     */
     private fun calculateRouteToBuilding(building: Building) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -104,16 +148,12 @@ class MapViewModel @Inject constructor(
             }
 
             try {
-                val route = navigationRepository.calculateRoute(currentLocation, building.location)
-
-                if (route != null) {
-                    _activeRoute.value = route
-                    _navigationState.value = NavigationState.Previewing(
-                        destination = building,
-                        route = route
-                    )
+                // Use smart pathfinding if ready and enabled
+                if (_isPathfindingReady.value && _useSmartPathfinding.value) {
+                    calculateSmartRoute(currentLocation, building)
                 } else {
-                    _uiEvent.emit(MapUiEvent.ShowError("Unable to calculate route"))
+                    // Fallback to your existing repository method
+                    calculateSimpleRoute(currentLocation, building)
                 }
             } catch (e: Exception) {
                 _uiEvent.emit(MapUiEvent.ShowError("Error calculating route: ${e.message}"))
@@ -122,6 +162,188 @@ class MapViewModel @Inject constructor(
             _isLoading.value = false
         }
     }
+
+    /**
+     * NEW: Smart route calculation using A* pathfinding
+     */
+    private suspend fun calculateSmartRoute(currentLocation: CampusLocation, building: Building) {
+        val start = GeoPoint(currentLocation.latitude, currentLocation.longitude)
+
+        // Find nearest entrance or use building location
+        val destination = if (building.entrances.isNotEmpty()) {
+            building.entrances.minByOrNull { entrance ->
+                calculateDistance(currentLocation, entrance)
+            } ?: building.location
+        } else {
+            building.location
+        }
+
+        val end = GeoPoint(destination.latitude, destination.longitude)
+
+        // Configure route options based on user preferences
+        val options = RouteOptions(
+            accessible = false,  // TODO: Get from user settings
+            preferOutdoor = true,
+            avoidStairs = false,
+            walkingSpeed = 1.4  // m/s
+        )
+
+        val (result, pathPoints) = campusPathfinding.findRouteWithPath(start, end, options)
+
+        when (result) {
+            is RouteResult.Success -> {
+                _activeRoute.value = result.route
+                _routePoints.value = pathPoints  // NEW: Path points for drawing
+
+                _navigationState.value = NavigationState.Previewing(
+                    destination = building,
+                    route = result.route
+                )
+
+                android.util.Log.d("MapViewModel", "Smart route calculated: ${result.route.waypoints.size} waypoints")
+            }
+            is RouteResult.NoRouteFound -> {
+                android.util.Log.w("MapViewModel", "No route found, falling back to simple routing")
+                // Fallback to simple routing
+                calculateSimpleRoute(currentLocation, building)
+            }
+            is RouteResult.Error -> {
+                android.util.Log.e("MapViewModel", "Route error: ${result.message}")
+                _uiEvent.emit(MapUiEvent.ShowError(result.message))
+            }
+        }
+    }
+
+    /**
+     * EXISTING: Simple route calculation (fallback method)
+     */
+    private suspend fun calculateSimpleRoute(currentLocation: CampusLocation, building: Building) {
+        val route = navigationRepository.calculateRoute(currentLocation, building.location)
+
+        if (route != null) {
+            _activeRoute.value = route
+            _routePoints.value = null  // No path points for simple routes
+
+            _navigationState.value = NavigationState.Previewing(
+                destination = building,
+                route = route
+            )
+        } else {
+            _uiEvent.emit(MapUiEvent.ShowError("Unable to calculate route"))
+        }
+    }
+
+    // ============== NEW PATHFINDING METHODS ==============
+
+    /**
+     * NEW: Get alternative routes to current destination
+     */
+    fun getAlternativeRoutes() {
+        viewModelScope.launch {
+            val currentLocation = _userLocation.value
+            val building = _selectedBuilding.value
+
+            if (currentLocation == null || building == null || !_isPathfindingReady.value) {
+                return@launch
+            }
+
+            val start = GeoPoint(currentLocation.latitude, currentLocation.longitude)
+            val end = GeoPoint(building.location.latitude, building.location.longitude)
+
+            try {
+                val routes = campusPathfinding.getAlternativeRoutes(start, end, maxAlternatives = 3)
+
+                if (routes.isNotEmpty()) {
+                    // For now, show the first alternative
+                    // TODO: Show UI to let user choose
+                    _activeRoute.value = routes.first()
+                    _routePoints.value = campusPathfinding.getRoutePathPoints(routes.first())
+
+                    _uiEvent.emit(MapUiEvent.ShowError("Alternative route found"))
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MapViewModel", "Error finding alternatives", e)
+            }
+        }
+    }
+
+    /**
+     * NEW: Calculate accessible route (no stairs, elevator only)
+     */
+    fun calculateAccessibleRoute() {
+        viewModelScope.launch {
+            val currentLocation = _userLocation.value
+            val building = _selectedBuilding.value
+
+            if (currentLocation == null || building == null || !_isPathfindingReady.value) {
+                return@launch
+            }
+
+            _isLoading.value = true
+
+            val start = GeoPoint(currentLocation.latitude, currentLocation.longitude)
+            val end = GeoPoint(building.location.latitude, building.location.longitude)
+
+            val options = RouteOptions(
+                accessible = true,
+                avoidStairs = true,
+                preferOutdoor = true,
+                walkingSpeed = 1.4
+            )
+
+            val (result, pathPoints) = campusPathfinding.findRouteWithPath(start, end, options)
+
+            when (result) {
+                is RouteResult.Success -> {
+                    _activeRoute.value = result.route
+                    _routePoints.value = pathPoints
+
+                    _navigationState.value = NavigationState.Previewing(
+                        destination = building,
+                        route = result.route
+                    )
+
+                    _uiEvent.emit(MapUiEvent.ShowError("Accessible route calculated"))
+                }
+                is RouteResult.NoRouteFound -> {
+                    _uiEvent.emit(MapUiEvent.ShowError("No accessible route found"))
+                }
+                is RouteResult.Error -> {
+                    _uiEvent.emit(MapUiEvent.ShowError(result.message))
+                }
+            }
+
+            _isLoading.value = false
+        }
+    }
+
+    /**
+     * NEW: Toggle between smart pathfinding and simple routing
+     */
+    fun togglePathfindingMode() {
+        _useSmartPathfinding.value = !_useSmartPathfinding.value
+
+        val mode = if (_useSmartPathfinding.value) "Smart" else "Simple"
+        viewModelScope.launch {
+            _uiEvent.emit(MapUiEvent.ShowError("Switched to $mode routing"))
+        }
+    }
+
+    /**
+     * NEW: Get walking time estimate to building
+     */
+    suspend fun getWalkingTimeToBuilding(building: Building): Long? {
+        val currentLocation = _userLocation.value ?: return null
+
+        if (!_isPathfindingReady.value) return null
+
+        val start = GeoPoint(currentLocation.latitude, currentLocation.longitude)
+        val end = GeoPoint(building.location.latitude, building.location.longitude)
+
+        return campusPathfinding.estimateWalkingTime(start, end)
+    }
+
+    // ============== EXISTING NAVIGATION METHODS (PRESERVED) ==============
 
     fun startNavigation() {
         val route = _activeRoute.value ?: return
@@ -149,6 +371,7 @@ class MapViewModel @Inject constructor(
         currentStepIndex = 0
         _navigationState.value = NavigationState.Idle
         _activeRoute.value = null
+        _routePoints.value = null  // NEW: Clear path points
         _selectedBuilding.value = null
 
         viewModelScope.launch {
@@ -161,6 +384,9 @@ class MapViewModel @Inject constructor(
         calculateRouteToBuilding(building)
     }
 
+    /**
+     * ENHANCED: Now checks if user is on actual path (not just distance)
+     */
     private fun updateNavigationProgress(location: CampusLocation, state: NavigationState.Navigating) {
         val route = state.route
 
@@ -182,6 +408,7 @@ class MapViewModel @Inject constructor(
             }
         }
 
+        // Enhanced off-route detection
         if (isOffRoute(location)) {
             viewModelScope.launch {
                 _uiEvent.emit(MapUiEvent.OffRoute)
@@ -228,14 +455,24 @@ class MapViewModel @Inject constructor(
         }
     }
 
+    /**
+     * ENHANCED: Uses pathfinding to check if on actual path
+     */
     private fun isOffRoute(location: CampusLocation): Boolean {
-        val route = _activeRoute.value ?: return false
+        if (!_isPathfindingReady.value || !_useSmartPathfinding.value) {
+            // Fallback to simple distance check
+            val route = _activeRoute.value ?: return false
+            val minDistance = route.waypoints.minOfOrNull { waypoint ->
+                calculateDistance(location, waypoint.location)
+            } ?: return false
+            return minDistance > 30.0
+        }
 
-        val minDistance = route.waypoints.minOfOrNull { waypoint ->
-            calculateDistance(location, waypoint.location)
-        } ?: return false
+        // Smart check: Is user on a campus path?
+        val geoPoint = GeoPoint(location.latitude, location.longitude)
+        val snappedPoint = campusPathfinding.snapToPath(geoPoint, maxDistance = 30.0)
 
-        return minDistance > 30.0
+        return snappedPoint == null  // If can't snap to path, user is off route
     }
 
     private fun calculateRemainingDistance(location: CampusLocation?): Double {
@@ -272,6 +509,8 @@ class MapViewModel @Inject constructor(
         return earthRadius * c
     }
 
+    // ============== EXISTING UI METHODS (PRESERVED) ==============
+
     fun switchToARMode() {
         val route = _activeRoute.value ?: return
         viewModelScope.launch {
@@ -292,6 +531,7 @@ class MapViewModel @Inject constructor(
     fun clearSelection() {
         _selectedBuilding.value = null
         _activeRoute.value = null
+        _routePoints.value = null  // NEW: Clear path points
         _navigationState.value = NavigationState.Idle
     }
 
@@ -303,7 +543,7 @@ class MapViewModel @Inject constructor(
 }
 
 /**
- * Map UI Events
+ * Map UI Events (EXISTING - preserved as-is)
  */
 sealed class MapUiEvent {
     object OpenSearch : MapUiEvent()

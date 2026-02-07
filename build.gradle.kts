@@ -93,7 +93,13 @@ dependencies {
     implementation("com.google.android.gms:play-services-location:21.0.1")
 
     // Maps (OSMDroid)
-    implementation("org.osmdroid:osmdroid-android:6.1.17")
+    implementation("org.osmdroid:osmdroid-android:6.1.18")
+
+    // OSMDroid Bonus Pack for routing and additional features
+    implementation("com.github.MKergall:osmbonuspack:6.9.0")
+
+    // Library required for OSMDroid configuration and tile caching
+    implementation("androidx.preference:preference-ktx:1.2.1")
 
     // ARCore
     implementation("com.google.ar:core:1.41.0")

@@ -51,7 +51,7 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="12dp"
             android:contentDescription="Satellite View"
-            android:src="@drawable/ic_compass"
+            android:src="@drawable/ic_satellite"
             app:backgroundTint="?attr/colorSurface"
             app:fabCustomSize="48dp"
             app:maxImageSize="24dp"
@@ -76,12 +76,11 @@
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/navigationPanel"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="286dp"
         android:layout_gravity="bottom"
         android:visibility="gone"
-        app:cornerSizeTopLeft="24dp"
-        app:cornerSizeTopRight="24dp"
         app:cardElevation="16dp"
+        app:shapeAppearanceOverlay="@style/ShapeAppearance.NavigationPanel"
         app:strokeWidth="0dp"
         tools:visibility="visible">
 
@@ -219,7 +218,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
                 android:layout_marginHorizontal="20dp"
-                android:layout_marginTop="20dp"
+                android:layout_marginTop="10dp"
                 android:text="Start Navigation"
                 android:textAllCaps="false"
                 android:textSize="17sp"

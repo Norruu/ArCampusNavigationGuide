@@ -55,6 +55,7 @@ class QRScannerFragment : Fragment() {
 
         cameraExecutor = Executors.newSingleThreadExecutor()
 
+        setupUI()
         observeViewModel()
 
         // Check camera permission
@@ -68,6 +69,13 @@ class QRScannerFragment : Fragment() {
                 "Camera permission is required to scan QR codes",
                 Snackbar.LENGTH_LONG
             ).show()
+        }
+    }
+
+    private fun setupUI() {
+        // Back button
+        binding.fabBack.setOnClickListener {
+            findNavController().navigateUp()
         }
     }
 
