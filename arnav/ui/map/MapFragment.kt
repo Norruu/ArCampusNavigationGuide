@@ -2,6 +2,7 @@ package com.campus.arnav.ui.map
 
 import android.Manifest
 import android.animation.ValueAnimator
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.ColorMatrixColorFilter
@@ -18,7 +19,6 @@ import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
-import androidx.transition.TransitionManager
 import com.campus.arnav.R
 import com.campus.arnav.data.model.Building
 import com.campus.arnav.data.model.Direction
@@ -34,6 +34,7 @@ import com.google.android.material.snackbar.Snackbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import androidx.core.view.doOnLayout
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
@@ -46,6 +47,7 @@ import org.osmdroid.views.overlay.Polyline
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import android.content.res.ColorStateList
+import com.campus.arnav.data.model.BuildingType
 
 @AndroidEntryPoint
 class MapFragment : Fragment() {
@@ -68,44 +70,57 @@ class MapFragment : Fragment() {
     private lateinit var compassManager: CompassManager
     private var isCompassMode = false
 
-    // Bottom Sheet Behavior
-    private lateinit var previewSheetBehavior: BottomSheetBehavior<View>
-
     // Drag Variables for Top Panel
     private var startY = 0f
     private var startHeight = 0
     private var maxPanelHeight = 0
 
-    // --- BOTTOM SHEET CALLBACK ---
+
+    // --- BOTTOM SHEET CALLBACK (FIXED) ---
+
     private val bottomSheetCallback = object : BottomSheetBehavior.BottomSheetCallback() {
         override fun onStateChanged(bottomSheet: View, newState: Int) {
             when (newState) {
-                BottomSheetBehavior.STATE_COLLAPSED -> {
-                    setMiniViewVisible(true)
-                }
-                BottomSheetBehavior.STATE_EXPANDED -> {
-                    setMiniViewVisible(false)
-                }
+                BottomSheetBehavior.STATE_COLLAPSED -> setMiniViewVisible(true)
+                BottomSheetBehavior.STATE_EXPANDED -> setMiniViewVisible(false)
                 BottomSheetBehavior.STATE_HIDDEN -> {
+                    // REMOVE stopNavigation() from here to stop the loop.
+                    // The Cancel button already handles this logic.
                     clearRoute()
                 }
-                else -> { }
+
+                else -> {}
             }
         }
 
         override fun onSlide(bottomSheet: View, slideOffset: Float) {
-            // Optional: Add fading effects
+            if (slideOffset >= 0) {
+                binding.navigationPanel.apply {
+                    val expandedAlpha = slideOffset
+                    val collapsedAlpha = 1f - slideOffset
+                    tvDestinationDescription.alpha = expandedAlpha
+                    tvDestinationDescription.isVisible = true
+                    tvRouteInfoMini.alpha = collapsedAlpha
+                    tvRouteInfoMini.isVisible = true
+                    btnMiniStart.alpha = collapsedAlpha
+                    btnMiniStart.isVisible = true
+                }
+            }
         }
     }
 
     private fun setMiniViewVisible(isMini: Boolean) {
         binding.navigationPanel.apply {
-            // Swap Text: Description (Max) vs Route Info (Mini)
+            // Expanded UI
             tvDestinationDescription.isVisible = !isMini
-            tvRouteInfoMini.isVisible = isMini
+            if (!isMini) tvDestinationDescription.alpha = 1f
 
-            // Toggle Mini Start Button
+            // Collapsed UI
+            tvRouteInfoMini.isVisible = isMini
+            if (isMini) tvRouteInfoMini.alpha = 1f
+
             btnMiniStart.isVisible = isMini
+            if (isMini) btnMiniStart.alpha = 1f
         }
     }
 
@@ -143,14 +158,18 @@ class MapFragment : Fragment() {
 
     private fun configureOSMDroid() {
         Configuration.getInstance().apply {
-            load(requireContext(), androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext()))
+            load(
+                requireContext(),
+                androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+            )
             userAgentValue = requireContext().packageName
         }
     }
 
     private fun setupMap() {
         mapView = binding.mapView
-        val currentNightMode = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
+        val currentNightMode =
+            resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
         isDarkMode = currentNightMode == android.content.res.Configuration.UI_MODE_NIGHT_YES
 
         mapView.apply {
@@ -176,7 +195,7 @@ class MapFragment : Fragment() {
 
         routePolyline = Polyline(mapView)
         routePolyline.outlinePaint.apply {
-            color = ContextCompat.getColor(requireContext(), R.color.white)
+            color = ContextCompat.getColor(requireContext(), R.color.route_blue)
             strokeWidth = 20f
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
@@ -199,82 +218,25 @@ class MapFragment : Fragment() {
 
     private fun setupLocationOverlay() {
         if (hasLocationPermission()) {
-            myLocationOverlay = MyLocationNewOverlay(GpsMyLocationProvider(requireContext()), mapView).apply {
-                enableMyLocation()
-                enableFollowLocation()
-            }
+            myLocationOverlay =
+                MyLocationNewOverlay(GpsMyLocationProvider(requireContext()), mapView).apply {
+                    enableMyLocation()
+                    enableFollowLocation()
+                }
             mapView.overlays.add(myLocationOverlay)
         }
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     private fun setupUI() {
-        // --- 1. Bottom Sheet Setup ---
-        val bottomSheet = binding.navigationPanel.root
-        previewSheetBehavior = BottomSheetBehavior.from(bottomSheet)
+        // --- 1. CLEAN SETUP (No BottomSheetBehavior) ---
+        // We don't need to initialize behavior anymore.
 
-        val density = resources.displayMetrics.density
-        previewSheetBehavior.peekHeight = (140 * density).toInt()
+        // Ensure it starts hidden
+        binding.navigationPanel.root.visibility = View.GONE
 
-        previewSheetBehavior.skipCollapsed = false
-        previewSheetBehavior.isHideable = true
-
-        previewSheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-        previewSheetBehavior.addBottomSheetCallback(bottomSheetCallback)
-
-        // --- 2. Active Panel (Top) Drag Logic ---
-        binding.activeNavigationPanel.dragHandleContainer.setOnTouchListener { view, event ->
-            val container = binding.activeNavigationPanel.infoContainer
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    startY = event.rawY
-                    if (maxPanelHeight == 0) {
-                        val widthSpec = View.MeasureSpec.makeMeasureSpec(binding.activeNavigationPanel.root.width, View.MeasureSpec.EXACTLY)
-                        val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-                        container.measure(widthSpec, heightSpec)
-                        maxPanelHeight = container.measuredHeight
-                    }
-                    if (!container.isVisible) {
-                        container.layoutParams.height = 0
-                        container.visibility = View.VISIBLE
-                    }
-                    startHeight = container.layoutParams.height
-                    true
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    val dy = event.rawY - startY
-                    var newHeight = (startHeight + dy).toInt()
-                    if (newHeight < 0) newHeight = 0
-                    if (newHeight > maxPanelHeight) newHeight = maxPanelHeight
-                    container.layoutParams.height = newHeight
-                    container.requestLayout()
-                    true
-                }
-                MotionEvent.ACTION_UP -> {
-                    val currentHeight = container.layoutParams.height
-                    val shouldOpen = currentHeight > (maxPanelHeight / 2)
-                    val targetHeight = if (shouldOpen) maxPanelHeight else 0
-                    val animator = ValueAnimator.ofInt(currentHeight, targetHeight)
-                    animator.duration = 250
-                    animator.interpolator = DecelerateInterpolator()
-                    animator.addUpdateListener { animation ->
-                        val value = animation.animatedValue as Int
-                        container.layoutParams.height = value
-                        container.requestLayout()
-                    }
-                    animator.start()
-                    if (!shouldOpen) {
-                        view.postDelayed({
-                            if (container.layoutParams.height == 0) container.visibility = View.GONE
-                        }, 250)
-                    } else {
-                        view.postDelayed({ container.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT }, 250)
-                    }
-                    view.performClick()
-                    true
-                }
-                else -> false
-            }
-        }
+        // --- 2. Keep Top Panel Drag Logic ---
+        setupActivePanelDrag()
 
         // --- 3. FABs ---
         binding.fabRecenter.setOnClickListener {
@@ -287,17 +249,84 @@ class MapFragment : Fragment() {
         binding.fabArMode.setOnClickListener { viewModel.switchToARMode() }
 
         // --- 4. Buttons ---
-        binding.navigationPanel.btnMiniStart.setOnClickListener { viewModel.startNavigation() }
         binding.navigationPanel.btnStartNavigation.setOnClickListener { viewModel.startNavigation() }
+
+        // CANCEL Button - Just stop navigation
         binding.navigationPanel.btnClosePanel.setOnClickListener {
             viewModel.stopNavigation()
-            previewSheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-            clearRoute()
+            // Visibility is handled in handleNavigationState, so we don't need to set GONE here manually
         }
+
         binding.activeNavigationPanel.btnEndNavigation.setOnClickListener {
             viewModel.stopNavigation()
-            binding.activeNavigationPanel.root.visibility = View.GONE
-            clearRoute()
+        }
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun setupActivePanelDrag() {
+        binding.activeNavigationPanel.dragHandleContainer.setOnTouchListener { view, event ->
+            val container = binding.activeNavigationPanel.infoContainer
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    startY = event.rawY
+                    if (maxPanelHeight == 0) {
+                        val widthSpec = View.MeasureSpec.makeMeasureSpec(
+                            binding.activeNavigationPanel.root.width,
+                            View.MeasureSpec.EXACTLY
+                        )
+                        val heightSpec =
+                            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+                        container.measure(widthSpec, heightSpec)
+                        maxPanelHeight = container.measuredHeight
+                    }
+                    if (!container.isVisible) {
+                        container.layoutParams.height = 0
+                        container.visibility = View.VISIBLE
+                    }
+                    startHeight = container.layoutParams.height
+                    true
+                }
+
+                MotionEvent.ACTION_MOVE -> {
+                    val dy = event.rawY - startY
+                    var newHeight = (startHeight + dy).toInt()
+                    if (newHeight < 0) newHeight = 0
+                    if (newHeight > maxPanelHeight) newHeight = maxPanelHeight
+                    container.layoutParams.height = newHeight
+                    container.requestLayout()
+                    true
+                }
+
+                MotionEvent.ACTION_UP -> {
+                    val currentHeight = container.layoutParams.height
+                    val shouldOpen = currentHeight > (maxPanelHeight / 2)
+                    val targetHeight = if (shouldOpen) maxPanelHeight else 0
+
+                    val animator = ValueAnimator.ofInt(currentHeight, targetHeight)
+                    animator.duration = 250
+                    animator.interpolator = DecelerateInterpolator()
+                    animator.addUpdateListener { animation ->
+                        val value = animation.animatedValue as Int
+                        container.layoutParams.height = value
+                        container.requestLayout()
+                    }
+                    animator.start()
+
+                    if (!shouldOpen) {
+                        view.postDelayed({
+                            if (container.layoutParams.height == 0) container.visibility = View.GONE
+                        }, 250)
+                    } else {
+                        view.postDelayed({
+                            container.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                        }, 250)
+                    }
+                    view.performClick()
+                    true
+                }
+
+                else -> false
+            }
         }
     }
 
@@ -331,13 +360,6 @@ class MapFragment : Fragment() {
             routePolyline.setPoints(emptyList())
             binding.fabArMode.visibility = View.GONE
         }
-
-        val dist = formatDistance(route.totalDistance)
-        val time = formatTime(route.estimatedTime)
-
-        binding.navigationPanel.tvRouteInfoMini.text = "$dist • $time"
-        binding.navigationPanel.tvDistance.text = dist
-        binding.navigationPanel.tvEta.text = time
     }
 
     private fun clearRoute() {
@@ -345,40 +367,64 @@ class MapFragment : Fragment() {
         binding.fabArMode.visibility = View.GONE
     }
 
+    @SuppressLint("SetTextI18n")
     private fun handleNavigationState(state: NavigationState) {
         when (state) {
             is NavigationState.Idle -> {
-                previewSheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
+                // HIDE BOTH
+                binding.navigationPanel.root.visibility = View.GONE
                 binding.activeNavigationPanel.root.visibility = View.GONE
                 clearRoute()
             }
+
             is NavigationState.Previewing -> {
-                if (previewSheetBehavior.state == BottomSheetBehavior.STATE_HIDDEN) {
-                    previewSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
-                }
-
-                binding.navigationPanel.tvDestinationName.text = state.destination.name
-                binding.navigationPanel.tvDestinationDescription.text = state.destination.description ?: ""
-
-                routePolyline.setPoints(emptyList())
-
+                // SHOW BOTTOM PANEL (Static, no animation)
+                binding.navigationPanel.root.visibility = View.VISIBLE
                 binding.activeNavigationPanel.root.visibility = View.GONE
-                setMiniViewVisible(false)
-            }
-            is NavigationState.Navigating -> {
-                previewSheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
-                binding.activeNavigationPanel.root.visibility = View.VISIBLE
-                binding.activeNavigationPanel.infoContainer.visibility = View.VISIBLE
-                binding.activeNavigationPanel.infoContainer.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
 
+                // --- UI UPDATES ---
+                binding.navigationPanel.tvDestinationName.text = state.destination.name
+                binding.navigationPanel.tvDestinationDescription.text =
+                    state.destination.description
+                binding.navigationPanel.ivDestinationIcon.setImageResource(
+                    getIconForBuildingType(state.destination.type)
+                )
+
+                state.route?.let { route ->
+                    updateRouteInfo(route)
+                    val points = route.waypoints.map {
+                        GeoPoint(
+                            it.location.latitude,
+                            it.location.longitude
+                        )
+                    }
+                    routePolyline.setPoints(points)
+                } ?: run {
+                    binding.navigationPanel.tvDistance.text = "..."
+                    binding.navigationPanel.tvEta.text = "..."
+                    routePolyline.setPoints(emptyList())
+                }
+            }
+
+            is NavigationState.Navigating -> {
+                // SHOW TOP PANEL, HIDE BOTTOM
+                binding.navigationPanel.root.visibility = View.GONE
+                binding.activeNavigationPanel.root.visibility = View.VISIBLE
+
+                // Initialize top panel logic
+                binding.activeNavigationPanel.infoContainer.visibility = View.VISIBLE
                 val points = state.route.waypoints.map {
-                    GeoPoint(it.location.latitude, it.location.longitude)
+                    GeoPoint(
+                        it.location.latitude,
+                        it.location.longitude
+                    )
                 }
                 routePolyline.setPoints(points)
                 updateActiveNavigation(state)
             }
+
             is NavigationState.Arrived -> {
-                previewSheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
+                binding.navigationPanel.root.visibility = View.GONE
                 binding.activeNavigationPanel.root.visibility = View.GONE
                 Snackbar.make(binding.root, "You have arrived!", Snackbar.LENGTH_LONG).show()
                 clearRoute()
@@ -386,10 +432,23 @@ class MapFragment : Fragment() {
         }
     }
 
+    private fun updateRouteInfo(route: Route) {
+        val dist = formatDistance(route.totalDistance)
+        val time = formatTime(route.estimatedTime)
+
+        binding.navigationPanel.apply {
+            tvDistance.text = dist
+            tvEta.text = time
+            tvRouteInfoMini.text = "$dist • $time"
+        }
+    }
+
     private fun updateActiveNavigation(state: NavigationState.Navigating) {
         binding.activeNavigationPanel.tvCurrentInstruction.text = state.currentStep.instruction
-        binding.activeNavigationPanel.tvDistanceToNext.text = "in ${formatDistance(state.distanceToNextWaypoint)}"
-        binding.activeNavigationPanel.tvRemainingDistance.text = formatDistance(state.remainingDistance)
+        binding.activeNavigationPanel.tvDistanceToNext.text =
+            "in ${formatDistance(state.distanceToNextWaypoint)}"
+        binding.activeNavigationPanel.tvRemainingDistance.text =
+            formatDistance(state.remainingDistance)
         binding.activeNavigationPanel.tvRemainingTime.text = formatTime(state.remainingTime)
         binding.activeNavigationPanel.progressRoute.progress = if (state.route.totalDistance > 0) {
             ((state.route.totalDistance - state.remainingDistance) / state.route.totalDistance * 100).toInt()
@@ -415,12 +474,24 @@ class MapFragment : Fragment() {
                 intent.putExtra(ARNavigationActivity.EXTRA_ROUTE, event.route)
                 startActivity(intent)
             }
-            is MapUiEvent.ShowError -> Snackbar.make(binding.root, event.message, Snackbar.LENGTH_LONG).show()
-            is MapUiEvent.OffRoute -> Snackbar.make(binding.root, "You are off route", Snackbar.LENGTH_SHORT).show()
+
+            is MapUiEvent.ShowError -> Snackbar.make(
+                binding.root,
+                event.message,
+                Snackbar.LENGTH_LONG
+            ).show()
+
+            is MapUiEvent.OffRoute -> Snackbar.make(
+                binding.root,
+                "You are off route",
+                Snackbar.LENGTH_SHORT
+            ).show()
+
             is MapUiEvent.ShowArrivalDialog -> {
                 Snackbar.make(binding.root, "You have arrived!", Snackbar.LENGTH_LONG).show()
                 viewModel.stopNavigation()
             }
+
             else -> {}
         }
     }
@@ -439,6 +510,19 @@ class MapFragment : Fragment() {
         }
     }
 
+    private fun getIconForBuildingType(type: BuildingType): Int {
+        return when (type) {
+            BuildingType.ACADEMIC -> R.drawable.ic_school
+            BuildingType.LIBRARY -> R.drawable.ic_library
+            BuildingType.CAFETERIA -> R.drawable.ic_restaurant
+            BuildingType.DORMITORY -> R.drawable.ic_home
+            BuildingType.SPORTS -> R.drawable.ic_sports
+            BuildingType.ADMINISTRATIVE -> R.drawable.ic_business
+            BuildingType.PARKING -> R.drawable.ic_parking
+            BuildingType.LANDMARK -> R.drawable.ic_landmark
+        }
+    }
+
     private fun formatDistance(meters: Double): String {
         return if (meters < 1000) "${meters.toInt()} M" else String.format("%.1f KM", meters / 1000)
     }
@@ -453,7 +537,10 @@ class MapFragment : Fragment() {
     }
 
     private fun hasLocationPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        return ContextCompat.checkSelfPermission(
+            requireContext(),
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
     }
 
     fun toggleMapLayer() {
@@ -461,17 +548,54 @@ class MapFragment : Fragment() {
         if (isSatelliteView) {
             try {
                 mapView.overlayManager.tilesOverlay.setColorFilter(null)
-                val googleSatellite = object : OnlineTileSourceBase("Google-Satellite", 0, 20, 256, ".png", arrayOf("https://mt0.google.com/vt/lyrs=s&hl=en&x=")) {
-                    override fun getTileURLString(pMapTileIndex: Long): String = "${baseUrl}${MapTileIndex.getX(pMapTileIndex)}&y=${MapTileIndex.getY(pMapTileIndex)}&z=${MapTileIndex.getZoom(pMapTileIndex)}"
+                val googleSatellite = object : OnlineTileSourceBase(
+                    "Google-Satellite",
+                    0,
+                    20,
+                    256,
+                    ".png",
+                    arrayOf("https://mt0.google.com/vt/lyrs=s&hl=en&x=")
+                ) {
+                    override fun getTileURLString(pMapTileIndex: Long): String =
+                        "${baseUrl}${MapTileIndex.getX(pMapTileIndex)}&y=${
+                            MapTileIndex.getY(pMapTileIndex)
+                        }&z=${MapTileIndex.getZoom(pMapTileIndex)}"
                 }
                 mapView.setTileSource(googleSatellite)
                 Toast.makeText(requireContext(), "Satellite View", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) { isSatelliteView = false }
+            } catch (e: Exception) {
+                isSatelliteView = false
+            }
         } else {
             mapView.setTileSource(TileSourceFactory.MAPNIK)
             if (isDarkMode) {
-                val inverseMatrix = floatArrayOf(-1.0f, 0.0f, 0.0f, 0.0f, 255f, 0.0f, -1.0f, 0.0f, 0.0f, 255f, 0.0f, 0.0f, -1.0f, 0.0f, 255f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f)
-                mapView.overlayManager.tilesOverlay.setColorFilter(ColorMatrixColorFilter(inverseMatrix))
+                val inverseMatrix = floatArrayOf(
+                    -1.0f,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    255f,
+                    0.0f,
+                    -1.0f,
+                    0.0f,
+                    0.0f,
+                    255f,
+                    0.0f,
+                    0.0f,
+                    -1.0f,
+                    0.0f,
+                    255f,
+                    0.0f,
+                    0.0f,
+                    0.0f,
+                    1.0f,
+                    0.0f
+                )
+                mapView.overlayManager.tilesOverlay.setColorFilter(
+                    ColorMatrixColorFilter(
+                        inverseMatrix
+                    )
+                )
             }
             Toast.makeText(requireContext(), "Default View", Toast.LENGTH_SHORT).show()
         }
@@ -482,15 +606,10 @@ class MapFragment : Fragment() {
         isCompassMode = !isCompassMode
 
         if (isCompassMode) {
-            // --- ACTIVE STATE (LIGHT UP BLUE) ---
-            // 1. Change Icon Color to Blue using imageTintList
             binding.fabCompass.imageTintList = ColorStateList.valueOf(
                 ContextCompat.getColor(requireContext(), R.color.map_blue)
             )
-
-            // 2. Change the icon to the filled version
             binding.fabCompass.setImageResource(R.drawable.ic_compass)
-
             Toast.makeText(requireContext(), "Compass Mode: On", Toast.LENGTH_SHORT).show()
 
             compassManager.start { mapOrientation, isFlat ->
@@ -511,13 +630,13 @@ class MapFragment : Fragment() {
         isCompassMode = false
         compassManager.stop()
 
-        // --- RESET STATE ---
-        // Reset to the default theme color (OnSurface)
         binding.fabCompass.imageTintList = ColorStateList.valueOf(
-            com.google.android.material.color.MaterialColors.getColor(binding.fabCompass, com.google.android.material.R.attr.colorOnSurface)
+            com.google.android.material.color.MaterialColors.getColor(
+                binding.fabCompass,
+                com.google.android.material.R.attr.colorOnSurface
+            )
         )
 
-        // Animate Map back to North (0 degrees)
         val currentOrientation = mapView.mapOrientation
         val animator = android.animation.ValueAnimator.ofFloat(currentOrientation, 0f)
         animator.duration = 500
@@ -535,7 +654,6 @@ class MapFragment : Fragment() {
         }
         myLocationOverlay?.enableMyLocation()
 
-        // RE-START COMPASS ON RESUME
         if (isCompassMode) {
             compassManager.start { mapOrientation, isFlat ->
                 if (isFlat) mapView.mapOrientation = mapOrientation
@@ -552,11 +670,9 @@ class MapFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
-        if (::previewSheetBehavior.isInitialized) {
-            previewSheetBehavior.removeBottomSheetCallback(bottomSheetCallback)
-        }
         campusPathsOverlay.clearPaths(mapView)
         mapView.onDetach()
+
         _binding = null
     }
 }

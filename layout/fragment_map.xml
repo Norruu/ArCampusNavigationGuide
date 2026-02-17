@@ -65,10 +65,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        app:behavior_hideable="true"
-        app:behavior_skipCollapsed="false"
-        app:behavior_peekHeight="190dp"
-        app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior" />
+        android:visibility="gone" />
 
     <include
         android:id="@+id/activeNavigationPanel"

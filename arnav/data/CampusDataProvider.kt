@@ -522,7 +522,7 @@ object CampusDataProvider {
             shortName = "Hub",
             description = "Students Lounge",
             location = CampusLocation("hub", 9.853590668411169, 122.88866477231646),
-            type = BuildingType.CAFETERIA,
+            type = BuildingType.LANDMARK,
             entrances = listOf(
                 CampusLocation("hub_entrance", 9.853590668411169, 122.88866477231646)
             )
@@ -555,7 +555,7 @@ object CampusDataProvider {
             shortName = "Clinic",
             description = "Clinic",
             location = CampusLocation("clinic", 9.851165444957411, 122.88894090526546),
-            type = BuildingType.ADMINISTRATIVE,
+            type = BuildingType.LANDMARK,
             entrances = listOf(
                 CampusLocation("clinic_entrance", 9.851165444957411, 122.88894090526546)
             )
@@ -572,14 +572,13 @@ object CampusDataProvider {
             )
         ),
 
-        // Other Buildings
         Building(
             id = "mini_hotel",
             name = "Mini Hotel",
             shortName = "Hotel",
             description = "Guest House",
             location = CampusLocation("hotel", 9.851318719269928, 122.88906428687646),
-            type = BuildingType.ADMINISTRATIVE,
+            type = BuildingType.LANDMARK,
             entrances = listOf(
                 CampusLocation("hotel_entrance", 9.851318719269928, 122.88906428687646)
             )

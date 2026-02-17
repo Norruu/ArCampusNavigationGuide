@@ -74,6 +74,9 @@ class MapViewModel @Inject constructor(
 
     private var allBuildingsCache: List<Building> = emptyList()
 
+    private var lastLocationUpdate: Long = 0
+    private var lastLocation: CampusLocation? = null
+
     // ============== INITIALIZATION ==============
 
     init {
@@ -94,11 +97,22 @@ class MapViewModel @Inject constructor(
         }
     }
 
+    // In MapViewModel.kt
+
     private fun loadBuildings() {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                _buildings.value = campusRepository.getAllBuildings()
+                // Fetch from repository
+                val result = campusRepository.getAllBuildings()
+
+                // --- CRITICAL FIX: Save the result to the cache ---
+                allBuildingsCache = result
+                // -------------------------------------------------
+
+                // Show all buildings initially
+                _buildings.value = result
+
             } catch (e: Exception) {
                 _uiEvent.emit(MapUiEvent.ShowError("Failed to load buildings"))
             }
@@ -112,10 +126,19 @@ class MapViewModel @Inject constructor(
             locationRepository.locationUpdates.collect { location ->
                 _userLocation.value = location
 
-                // Update navigation progress if active
                 val currentState = _navigationState.value
                 if (currentState is NavigationState.Navigating) {
-                    updateNavigationProgress(location, currentState)
+                    val currentTime = System.currentTimeMillis()
+                    val timeDiff = currentTime - lastLocationUpdate
+
+                    // Only update if 2 seconds passed OR moved > 3 meters
+                    val dist = lastLocation?.let { calculateDistance(it, location) } ?: 100.0
+
+                    if (timeDiff > 2000 || dist > 3.0) {
+                        lastLocationUpdate = currentTime
+                        lastLocation = location
+                        updateNavigationProgress(location, currentState)
+                    }
                 }
             }
         }
@@ -123,20 +146,23 @@ class MapViewModel @Inject constructor(
 
     // ============== ROUTING LOGIC ==============
 
-    // Inside MapViewModel.kt
-
     fun onBuildingSelected(building: Building) {
         val currentState = _navigationState.value
 
-        // ALLOW selection if we are Idle OR already Previewing another building
-        if (currentState is NavigationState.Idle || currentState is NavigationState.Previewing) {
-
-            // 1. Update the state to the new building
-            _navigationState.value = NavigationState.Previewing(building)
-
-            // 2. Optional: If you want to calculate the route preview immediately
-            // calculateRoutePreview(building)
+        // If we are already previewing THIS building, do nothing.
+        // This stops the "flicker" on double-clicks.
+        if (currentState is NavigationState.Previewing && currentState.destination.id == building.id) {
+            return
         }
+
+        // Only switch if we are Idle or moving to a DIFFERENT building
+        _selectedBuilding.value = building
+        _buildings.value = listOf(building)
+
+        // Update state directly to Previewing
+        _navigationState.value = NavigationState.Previewing(building, null)
+
+        calculateRouteToBuilding(building)
     }
 
     private fun calculateRouteToBuilding(building: Building) {
@@ -244,12 +270,21 @@ class MapViewModel @Inject constructor(
         viewModelScope.launch { _uiEvent.emit(MapUiEvent.NavigationStarted) }
     }
 
+    // In MapViewModel.kt
+
     fun stopNavigation() {
         navigationJob?.cancel()
-        _navigationState.value = NavigationState.Idle
+
+        // 1. Restore ALL markers to the map
+        _buildings.value = allBuildingsCache
+
+        // 2. Clear selection and route
+        _selectedBuilding.value = null
         _activeRoute.value = null
         _routePoints.value = null
-        _selectedBuilding.value = null
+
+        // 3. Reset State
+        _navigationState.value = NavigationState.Idle
         viewModelScope.launch { _uiEvent.emit(MapUiEvent.NavigationStopped) }
     }
 

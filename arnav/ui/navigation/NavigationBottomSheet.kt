@@ -164,6 +164,9 @@ class NavigationBottomSheet : BottomSheetDialogFragment() {
     /**
      * Handle all navigation states - MUST be exhaustive
      */
+    /**
+     * Handle all navigation states - MUST be exhaustive
+     */
     private fun handleNavigationState(state: NavigationState) {
         when (state) {
             is NavigationState.Idle -> {
@@ -172,17 +175,28 @@ class NavigationBottomSheet : BottomSheetDialogFragment() {
             is NavigationState.Previewing -> {
                 showPreviewState()
                 updateDestinationInfo(state.destination)
-                updateRouteInfo(state.route)
+
+                // --- FIX START: Safely handle nullable route ---
+                state.route?.let { route ->
+                    // Route exists: Update UI
+                    updateRouteInfo(route)
+                } ?: run {
+                    // Route is null (calculating): Show placeholder
+                    binding.tvDistance.text = "--"
+                    binding.tvEta.text = "Calculating..."
+                    binding.tvStepsCount.text = ""
+                }
+                // --- FIX END ---
             }
             is NavigationState.Navigating -> {
                 showActiveNavigationState()
+                // Navigating state always has a non-null route, so this is safe
                 updateActiveNavigation(state)
             }
             is NavigationState.Arrived -> {
                 showArrivedState()
             }
             else -> {
-                // Handle any future states
                 showPreviewState()
             }
         }

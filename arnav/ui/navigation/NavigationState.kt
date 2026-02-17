@@ -8,10 +8,13 @@ sealed class NavigationState {
 
     object Idle : NavigationState()
 
+    // --- CRITICAL FIX ---
     data class Previewing(
         val destination: Building,
-        val route: Route
+        // Must have '?' and '= null'
+        val route: Route? = null
     ) : NavigationState()
+    // --------------------
 
     data class Navigating(
         val route: Route,
