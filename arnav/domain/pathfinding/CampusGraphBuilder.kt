@@ -3,210 +3,85 @@ package com.campus.arnav.domain.pathfinding
 import com.campus.arnav.data.model.Building
 import com.campus.arnav.data.model.CampusLocation
 
-/**
- * Helper class to build the campus navigation graph
- *
- * Usage:
- * val graph = CampusGraphBuilder()
- *     .addBuilding(libraryBuilding)
- *     .addPathNode("path_1", location1)
- *     .addPathNode("path_2", location2)
- *     .connectPath("path_1", "path_2")
- *     .connectBuildingEntrance("library", "path_1")
- *     .build()
- */
 class CampusGraphBuilder {
-
     private val graph = CampusGraph()
-    private val buildings = mutableMapOf<String, Building>()
 
-    /**
-     * Add a building with its entrances
-     */
     fun addBuilding(building: Building): CampusGraphBuilder {
-        buildings[building.id] = building
-
-        // Add main building location as destination node
+        // Add building center
         graph.addNode(CampusGraph.GraphNode(
             id = building.id,
             location = building.location,
-            type = CampusGraph.NodeType.DESTINATION,
-            buildingId = building.id
+            type = CampusGraph.NodeType.BUILDING
         ))
 
-        // Add entrance nodes
+        // Add entrances
         building.entrances.forEachIndexed { index, entrance ->
             val entranceId = "${building.id}_entrance_$index"
             graph.addNode(CampusGraph.GraphNode(
                 id = entranceId,
                 location = entrance,
-                type = CampusGraph.NodeType.ENTRANCE,
-                buildingId = building.id
+                type = CampusGraph.NodeType.PATH
             ))
-
-            // Connect entrance to building
-            graph.addEdge(entranceId, building.id, isIndoor = true)
+            // Connect entrance to building center
+            val dist = calculateDistance(building.location, entrance)
+            graph.addEdge(building.id, entranceId, dist)
         }
-
         return this
     }
 
     /**
-     * Add an outdoor path node (intersection, corner, etc.)
+     * Add a generic path node
      */
-    fun addPathNode(
-        id: String,
-        location: CampusLocation
-    ): CampusGraphBuilder {
+    fun addPathNode(id: String, location: CampusLocation): CampusGraphBuilder {
         graph.addNode(CampusGraph.GraphNode(
             id = id,
             location = location,
-            type = CampusGraph.NodeType.OUTDOOR_PATH
+            type = CampusGraph.NodeType.PATH
         ))
         return this
     }
 
     /**
-     * Add an indoor junction node
+     * Add a GATE (Entrance to Campus)
+     * This is critical for the Hybrid Routing System
      */
-    fun addIndoorJunction(
-        id: String,
-        location: CampusLocation,
-        buildingId: String,
-        floor: Int
-    ): CampusGraphBuilder {
+    fun addGate(id: String, location: CampusLocation): CampusGraphBuilder {
         graph.addNode(CampusGraph.GraphNode(
             id = id,
             location = location,
-            type = CampusGraph.NodeType.INDOOR_JUNCTION,
-            buildingId = buildingId,
-            floor = floor
+            type = CampusGraph.NodeType.ENTRANCE // Mark as ENTRANCE
         ))
         return this
     }
 
-    /**
-     * Add stairs node
-     */
-    fun addStairs(
-        id: String,
-        location: CampusLocation,
-        buildingId: String,
-        floors: List<Int>
-    ): CampusGraphBuilder {
-        floors.forEach { floor ->
-            val stairsId = "${id}_floor_$floor"
-            val floorLocation = location.copy(
-                id = stairsId,
-                altitude = floor * 3.0 // Assume 3m per floor
-            )
+    fun connectPath(id1: String, id2: String, isAccessible: Boolean = true): CampusGraphBuilder {
+        val node1 = graph.nodes[id1]
+        val node2 = graph.nodes[id2]
 
-            graph.addNode(CampusGraph.GraphNode(
-                id = stairsId,
-                location = floorLocation,
-                type = CampusGraph.NodeType.STAIRS,
-                buildingId = buildingId,
-                floor = floor
-            ))
+        if (node1 != null && node2 != null) {
+            val dist = calculateDistance(node1.location, node2.location)
+            graph.addEdge(id1, id2, dist, isAccessible)
         }
-
-        // Connect stairs between floors
-        for (i in 0 until floors.lastIndex) {
-            graph.addEdge(
-                "${id}_floor_${floors[i]}",
-                "${id}_floor_${floors[i + 1]}",
-                isIndoor = true,
-                isAccessible = false // Stairs are not accessible
-            )
-        }
-
         return this
     }
 
-    /**
-     * Add elevator node
-     */
-    fun addElevator(
-        id: String,
-        location: CampusLocation,
-        buildingId: String,
-        floors: List<Int>
-    ): CampusGraphBuilder {
-        floors.forEach { floor ->
-            val elevatorId = "${id}_floor_$floor"
-            val floorLocation = location.copy(
-                id = elevatorId,
-                altitude = floor * 3.0
-            )
-
-            graph.addNode(CampusGraph.GraphNode(
-                id = elevatorId,
-                location = floorLocation,
-                type = CampusGraph.NodeType.ELEVATOR,
-                buildingId = buildingId,
-                floor = floor
-            ))
-        }
-
-        // Connect elevator between all floors (bidirectional)
-        for (i in floors.indices) {
-            for (j in i + 1..floors.lastIndex) {
-                graph.addEdge(
-                    "${id}_floor_${floors[i]}",
-                    "${id}_floor_${floors[j]}",
-                    isIndoor = true,
-                    isAccessible = true // Elevators are accessible
-                )
-            }
-        }
-
-        return this
-    }
-
-    /**
-     * Connect two path nodes (outdoor)
-     */
-    fun connectPath(
-        fromId: String,
-        toId: String,
-        isAccessible: Boolean = true
-    ): CampusGraphBuilder {
-        graph.addEdge(fromId, toId, isIndoor = false, isAccessible = isAccessible)
-        return this
-    }
-
-    /**
-     * Connect indoor nodes
-     */
-    fun connectIndoor(
-        fromId: String,
-        toId: String,
-        isAccessible: Boolean = true
-    ): CampusGraphBuilder {
-        graph.addEdge(fromId, toId, isIndoor = true, isAccessible = isAccessible)
-        return this
-    }
-
-    /**
-     * Connect a building entrance to a path node
-     */
-    fun connectBuildingToPath(
-        buildingId: String,
-        entranceIndex: Int,
-        pathNodeId: String
-    ): CampusGraphBuilder {
+    fun connectBuildingToPath(buildingId: String, entranceIndex: Int, pathId: String): CampusGraphBuilder {
         val entranceId = "${buildingId}_entrance_$entranceIndex"
-        graph.addEdge(entranceId, pathNodeId, isIndoor = false)
-        return this
+        return connectPath(entranceId, pathId)
     }
 
-    /**
-     * Build the final graph
-     */
-    fun build(): CampusGraph = graph
+    fun build(): CampusGraph {
+        return graph
+    }
 
-    /**
-     * Get the current graph (for inspection)
-     */
-    fun getGraph(): CampusGraph = graph
+    private fun calculateDistance(p1: CampusLocation, p2: CampusLocation): Double {
+        val R = 6371000.0
+        val dLat = Math.toRadians(p2.latitude - p1.latitude)
+        val dLon = Math.toRadians(p2.longitude - p1.longitude)
+        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(Math.toRadians(p1.latitude)) * Math.cos(Math.toRadians(p2.latitude)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2)
+        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+        return R * c
+    }
 }

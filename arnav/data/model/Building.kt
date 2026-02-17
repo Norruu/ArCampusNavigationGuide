@@ -51,7 +51,10 @@ enum class RoomType {
     OFFICE,
     LAB,
     RESTROOM,
-    ELEVATOR,
     STAIRS,
     ENTRANCE
+}
+
+enum class BuildingCategory {
+    ACADEMIC, OFFICE, CAFETERIA, LIBRARY, GYM, CLINIC, LAB, DORM, PARKING, OTHER
 }

@@ -41,6 +41,12 @@
             android:id="@+id/action_searchFragment_to_buildingDetailFragment"
             app:destination="@id/buildingDetailFragment" />
 
+        <action
+            android:id="@+id/action_searchFragment_to_mapFragment"
+            app:destination="@id/mapFragment"
+            app:popUpTo="@id/mapFragment"
+            app:popUpToInclusive="false" />
+
     </fragment>
 
     <!-- Building Detail Fragment -->

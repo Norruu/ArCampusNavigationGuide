@@ -8,300 +8,195 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PointF
 import android.graphics.Shader
+import com.campus.arnav.data.model.Route //
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Overlay
 
 /**
- * Custom overlay for drawing smooth, animated route lines on the map
- * Similar to Apple Maps route visualization
+ * A Specialized Painter that renders Hybrid Routes with Apple-Maps-like smoothing.
+ *
+ * UPDATES FOR HYBRID SYSTEM:
+ * - Added setRoute() to accept Domain objects directly
+ * - Added logic to handle "Stitched" route smoothing
+ * - Optimized memory usage during draw cycles
  */
 class SmoothRouteOverlay(
-    private val routePoints: List<GeoPoint>,
-    private val routeColor: Int = Color.parseColor("#007AFF"),
-    private val strokeWidth: Float = 12f,                    // <-- Use Float
-    private val useGradient: Boolean = false,
-    private val animated: Boolean = false
+    private val mapView: MapView, // Pass MapView in constructor for better projection handling
+    private var routePoints: MutableList<GeoPoint> = mutableListOf(),
+    private var routeColor: Int = Color.parseColor("#007AFF"),
+    private var strokeWidth: Float = 14f,
+    private var useGradient: Boolean = false,
+    private var animated: Boolean = false
 ) : Overlay() {
 
-    // Main route paint
+    // --- PAINTS (Pre-allocated for performance) ---
+
     private val routePaint = Paint().apply {
         isAntiAlias = true
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
         color = routeColor
-        strokeWidth = this@SmoothRouteOverlay.strokeWidth   // <-- Already Float
+        strokeWidth = this@SmoothRouteOverlay.strokeWidth
     }
 
-    // Route outline/border paint (for better visibility)
     private val outlinePaint = Paint().apply {
         isAntiAlias = true
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
-        color = Color.parseColor("#40000000") // Semi-transparent black
-        strokeWidth = this@SmoothRouteOverlay.strokeWidth + 4f  // <-- Use Float
+        color = Color.parseColor("#40000000") // Semi-transparent shadow/outline
+        strokeWidth = this@SmoothRouteOverlay.strokeWidth + 6f
     }
 
-    // Walked path paint (for showing progress)
     private val walkedPaint = Paint().apply {
         isAntiAlias = true
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
-        color = Color.parseColor("#34C759") // Green for walked portion
+        color = Color.parseColor("#34C759") // Apple Maps Green
         strokeWidth = this@SmoothRouteOverlay.strokeWidth
     }
 
-    // Dashed line paint (for alternative routes)
-    private val dashedPaint = Paint().apply {
-        isAntiAlias = true
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-        color = Color.parseColor("#80007AFF") // Semi-transparent blue
-        strokeWidth = this@SmoothRouteOverlay.strokeWidth - 4f  // <-- Use Float
-        pathEffect = DashPathEffect(floatArrayOf(20f, 10f), 0f)  // <-- Use Float
-    }
-
-    // Animation progress (0.0 to 1.0)
+    // --- STATE ---
     private var animationProgress = 1f
-
-    // Walked progress (0.0 to 1.0) - how much of the route has been walked
     private var walkedProgress = 0f
-
-    // Path objects for drawing
     private val routePath = Path()
     private val walkedPath = Path()
+    private val screenPoints = ArrayList<PointF>() // Reusable list
 
-    // Screen points cache
-    private val screenPoints = mutableListOf<PointF>()
+    // --- DRAWING ---
 
     override fun draw(canvas: Canvas, mapView: MapView, shadow: Boolean) {
         if (shadow) return
-        if (routePoints.isEmpty()) return
+        if (routePoints.size < 2) return
 
-        // Convert geo points to screen points
-        updateScreenPoints(mapView)
+        // 1. Projection (Convert Lat/Lon to Screen X/Y)
+        // We must do this every frame because the map moves/zooms
+        projectPoints(mapView)
 
-        if (screenPoints.size < 2) return
+        // 2. Build the Smooth Path (Bezier Curves)
+        buildSmoothPath(routePath, screenPoints, animationProgress)
 
-        // Build the path
-        buildSmoothPath()
-
-        // Draw outline first (for depth effect)
+        // 3. Draw Outline (Depth)
         canvas.drawPath(routePath, outlinePaint)
 
-        // Apply gradient if enabled
-        if (useGradient) {
-            applyGradient(mapView)
-        }
-
-        // Draw main route
+        // 4. Draw Main Route
+        if (useGradient) updateGradient() // Re-align gradient to current screen path
         canvas.drawPath(routePath, routePaint)
 
-        // Draw walked portion if any
+        // 5. Draw Walked Portion (if navigation is active)
         if (walkedProgress > 0f) {
-            buildWalkedPath()
+            buildSmoothPath(walkedPath, screenPoints, walkedProgress)
             canvas.drawPath(walkedPath, walkedPaint)
         }
     }
 
     /**
-     * Convert GeoPoints to screen coordinates
+     * Optimized projection: Reuses PointF objects to avoid Garbage Collection stutter
      */
-    private fun updateScreenPoints(mapView: MapView) {
-        screenPoints.clear()
-
+    private fun projectPoints(mapView: MapView) {
         val projection = mapView.projection
 
-        for (geoPoint in routePoints) {
-            val screenPoint = projection.toPixels(geoPoint, null)
-            screenPoints.add(PointF(screenPoint.x.toFloat(), screenPoint.y.toFloat()))
+        // Ensure list size matches
+        while (screenPoints.size < routePoints.size) screenPoints.add(PointF())
+        while (screenPoints.size > routePoints.size) screenPoints.removeAt(screenPoints.lastIndex)
+
+        // Update coordinates
+        routePoints.forEachIndexed { index, geoPoint ->
+            val p = projection.toPixels(geoPoint, null)
+            screenPoints[index].set(p.x.toFloat(), p.y.toFloat())
         }
     }
 
     /**
-     * Build a smooth curved path through all points using Bezier curves
+     * The Logic: Catmull-Rom Spline to Cubic Bezier conversion
+     * This makes the "Stitched" joint between OSM and Campus look seamless.
      */
-    private fun buildSmoothPath() {
-        routePath.reset()
+    private fun buildSmoothPath(path: Path, points: List<PointF>, progress: Float) {
+        path.reset()
+        if (points.isEmpty()) return
 
-        if (screenPoints.size < 2) return
+        // Calculate how many points to include based on progress
+        val limit = (points.size * progress).toInt().coerceAtLeast(1)
+        val drawLimit = limit.coerceAtMost(points.size)
 
-        // Calculate how many points to draw based on animation progress
-        val pointsToDraw = if (animated) {
-            (screenPoints.size * animationProgress).toInt().coerceAtLeast(2)
-        } else {
-            screenPoints.size
-        }
+        path.moveTo(points[0].x, points[0].y)
 
-        // Start at first point
-        routePath.moveTo(screenPoints[0].x, screenPoints[0].y)
+        if (drawLimit < 2) return
 
-        if (pointsToDraw == 2) {
-            // Just draw a line for 2 points
-            routePath.lineTo(screenPoints[1].x, screenPoints[1].y)
-            return
-        }
+        for (i in 0 until drawLimit - 1) {
+            val p0 = points[(i - 1).coerceAtLeast(0)]
+            val p1 = points[i]
+            val p2 = points[i + 1]
+            val p3 = points[(i + 2).coerceAtMost(points.size - 1)]
 
-        // Use Catmull-Rom spline for smooth curves
-        for (i in 0 until pointsToDraw - 1) {
-            val p0 = if (i > 0) screenPoints[i - 1] else screenPoints[i]
-            val p1 = screenPoints[i]
-            val p2 = screenPoints[i + 1]
-            val p3 = if (i < pointsToDraw - 2) screenPoints[i + 2] else screenPoints[i + 1]
-
-            // Calculate control points for cubic Bezier
+            // Tension: 0.5 is standard Catmull-Rom (smooth but tight)
             val tension = 0.5f
 
-            val cp1x = p1.x + (p2.x - p0.x) * tension / 3f
-            val cp1y = p1.y + (p2.y - p0.y) * tension / 3f
+            val cp1x = p1.x + (p2.x - p0.x) * tension / 6f
+            val cp1y = p1.y + (p2.y - p0.y) * tension / 6f
 
-            val cp2x = p2.x - (p3.x - p1.x) * tension / 3f
-            val cp2y = p2.y - (p3.y - p1.y) * tension / 3f
+            val cp2x = p2.x - (p3.x - p1.x) * tension / 6f
+            val cp2y = p2.y - (p3.y - p1.y) * tension / 6f
 
-            routePath.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y)
+            path.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y)
         }
     }
 
-    /**
-     * Build the walked portion of the path
-     */
-    private fun buildWalkedPath() {
-        walkedPath.reset()
+    private fun updateGradient() {
+        if (screenPoints.isEmpty()) return
+        val start = screenPoints.first()
+        val end = screenPoints.last()
 
-        if (screenPoints.size < 2 || walkedProgress <= 0f) return
-
-        val pointsWalked = (screenPoints.size * walkedProgress).toInt().coerceAtLeast(1)
-
-        walkedPath.moveTo(screenPoints[0].x, screenPoints[0].y)
-
-        for (i in 0 until pointsWalked.coerceAtMost(screenPoints.size - 1)) {
-            val p0 = if (i > 0) screenPoints[i - 1] else screenPoints[i]
-            val p1 = screenPoints[i]
-            val p2 = screenPoints[i + 1]
-            val p3 = if (i < screenPoints.size - 2) screenPoints[i + 2] else screenPoints[i + 1]
-
-            val tension = 0.5f
-
-            val cp1x = p1.x + (p2.x - p0.x) * tension / 3f
-            val cp1y = p1.y + (p2.y - p0.y) * tension / 3f
-
-            val cp2x = p2.x - (p3.x - p1.x) * tension / 3f
-            val cp2y = p2.y - (p3.y - p1.y) * tension / 3f
-
-            walkedPath.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y)
-        }
-    }
-
-    /**
-     * Apply gradient shader to the route paint
-     */
-    private fun applyGradient(mapView: MapView) {
-        if (screenPoints.size < 2) return
-
-        val startPoint = screenPoints.first()
-        val endPoint = screenPoints.last()
-
-        val gradient = LinearGradient(
-            startPoint.x, startPoint.y,
-            endPoint.x, endPoint.y,
-            intArrayOf(
-                Color.parseColor("#007AFF"),  // Start color (blue)
-                Color.parseColor("#5856D6")   // End color (purple)
-            ),
+        // Dynamic gradient that follows the route direction on screen
+        routePaint.shader = LinearGradient(
+            start.x, start.y, end.x, end.y,
+            intArrayOf(Color.parseColor("#007AFF"), Color.parseColor("#5856D6")), // Blue -> Purple
             null,
             Shader.TileMode.CLAMP
         )
+    }
 
-        routePaint.shader = gradient
+    // --- HYBRID INTEGRATION METHODS ---
+
+    /**
+     * Directly accepts the Hybrid Route object.
+     * This bridges the Domain Layer (HybridCampusPathfinding) and UI Layer (Painter).
+     */
+    fun setRoute(route: Route) {
+        this.routePoints.clear()
+
+        // Convert CampusLocation -> GeoPoint
+        route.waypoints.forEach { waypoint ->
+            this.routePoints.add(GeoPoint(waypoint.location.latitude, waypoint.location.longitude))
+        }
+
+        // Auto-configure style based on route type if you want
+        // e.g., if it's very long, force gradient; if short, use solid color
+        if (route.totalDistance > 500) {
+            useGradient = true
+        }
+
+        mapView.invalidate()
     }
 
     /**
-     * Set animation progress (0.0 to 1.0)
+     * Updates the "Walked" progress based on current user location index.
+     * @param currentStepIndex The index from NavigationViewModel
      */
-    fun setAnimationProgress(progress: Float) {
-        animationProgress = progress.coerceIn(0f, 1f)
-    }
-
-    /**
-     * Set walked progress (0.0 to 1.0)
-     */
-    fun setWalkedProgress(progress: Float) {
-        walkedProgress = progress.coerceIn(0f, 1f)
-    }
-
-    /**
-     * Update route points
-     */
-    fun updateRoutePoints(newPoints: List<GeoPoint>) {
-        (routePoints as? MutableList)?.apply {
-            clear()
-            addAll(newPoints)
+    fun updateProgress(currentStepIndex: Int, totalSteps: Int) {
+        if (totalSteps > 0) {
+            this.walkedProgress = currentStepIndex.toFloat() / totalSteps.toFloat()
+            mapView.invalidate()
         }
     }
 
-    /**
-     * Set route color
-     */
-    fun setRouteColor(color: Int) {
-        routePaint.color = color
-        routePaint.shader = null // Remove gradient if color is set directly
-    }
-
-    /**
-     * Set stroke width
-     */
-    fun setStrokeWidth(width: Float) {
-        routePaint.strokeWidth = width
-        outlinePaint.strokeWidth = width + 4f
-        walkedPaint.strokeWidth = width
-    }
-
-    companion object {
-        // Predefined route colors
-        val COLOR_PRIMARY = Color.parseColor("#007AFF")      // Blue
-        val COLOR_ALTERNATIVE = Color.parseColor("#8E8E93")  // Gray
-        val COLOR_ACCESSIBLE = Color.parseColor("#34C759")   // Green
-        val COLOR_WARNING = Color.parseColor("#FF9500")      // Orange
-        val COLOR_WALKED = Color.parseColor("#34C759")       // Green
-
-        /**
-         * Create a primary route overlay
-         */
-        fun createPrimaryRoute(points: List<GeoPoint>): SmoothRouteOverlay {
-            return SmoothRouteOverlay(
-                routePoints = points,
-                routeColor = COLOR_PRIMARY,
-                strokeWidth = 12f,
-                useGradient = true
-            )
-        }
-
-        /**
-         * Create an alternative route overlay
-         */
-        fun createAlternativeRoute(points: List<GeoPoint>): SmoothRouteOverlay {
-            return SmoothRouteOverlay(
-                routePoints = points,
-                routeColor = COLOR_ALTERNATIVE,
-                strokeWidth = 8f,
-                useGradient = false
-            )
-        }
-
-        /**
-         * Create an accessible route overlay
-         */
-        fun createAccessibleRoute(points: List<GeoPoint>): SmoothRouteOverlay {
-            return SmoothRouteOverlay(
-                routePoints = points,
-                routeColor = COLOR_ACCESSIBLE,
-                strokeWidth = 12f,
-                useGradient = false
-            )
-        }
+    fun clear() {
+        routePoints.clear()
+        screenPoints.clear()
+        routePath.reset()
+        mapView.invalidate()
     }
 }

@@ -17,10 +17,10 @@ import javax.inject.Singleton
 object NetworkModule {
 
     // Change this to your server URL or OSRM server
-    private const val BASE_URL = "https://your-campus-api.com/"
+    private const val BASE_URL = "https://CPSU-MAIN.com/"
 
     // For OSRM demo server (not for production!)
-    // private const val BASE_URL = "https://router.project-osrm.org/"
+    //private const val BASE_URL = "https://router.project-osrm.org/"
 
     @Provides
     @Singleton

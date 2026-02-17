@@ -1,375 +1,177 @@
 package com.campus.arnav.domain.pathfinding
 
-import com.campus.arnav.data.model.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.campus.arnav.data.model.CampusLocation
+import com.campus.arnav.data.model.Direction
+import com.campus.arnav.data.model.NavigationStep
+import com.campus.arnav.data.model.Route
+import com.campus.arnav.data.model.Waypoint
+import com.campus.arnav.data.model.WaypointType
+import java.util.PriorityQueue
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.*
 
-/**
- * PathfindingEngine - Main entry point for all pathfinding operations
- *
- * This class serves as a facade that:
- * - Manages the campus graph
- * - Provides easy-to-use pathfinding methods
- * - Handles graph initialization and updates
- * - Caches computed routes
- */
-@Singleton
-class PathfindingEngine @Inject constructor() {
-
-    private var campusGraph: CampusGraph? = null
-    private var pathfinder: AStarPathfinder? = null
-    private var isInitialized = false
-
-    // Route cache for recently calculated routes
-    private val routeCache = mutableMapOf<String, Route>()
-    private val maxCacheSize = 20
-
-    /**
-     * Initialize the pathfinding engine with campus data
-     */
-    suspend fun initialize(
-        buildings: List<Building>,
-        pathNodes: List<PathNode>,
-        pathConnections: List<PathConnection>
-    ) = withContext(Dispatchers.Default) {
-        val builder = CampusGraphBuilder()
-
-        // Add buildings with entrances
-        buildings.forEach { building ->
-            builder.addBuilding(building)
-        }
-
-        // Add path nodes (outdoor walkways, intersections)
-        pathNodes.forEach { node ->
-            builder.addPathNode(node.id, node.location)
-        }
-
-        // Connect paths
-        pathConnections.forEach { connection ->
-            builder.connectPath(
-                connection.fromId,
-                connection.toId,
-                connection.isAccessible
-            )
-        }
-
-        campusGraph = builder.build()
-        pathfinder = AStarPathfinder(campusGraph!!)
-        isInitialized = true
-    }
-
-    /**
-     * Initialize with a pre-built graph
-     */
-    fun initializeWithGraph(graph: CampusGraph) {
-        campusGraph = graph
-        pathfinder = AStarPathfinder(graph)
-        isInitialized = true
-    }
-
-    /**
-     * Check if the engine is ready
-     */
-    fun isReady(): Boolean = isInitialized && pathfinder != null
-
-    /**
-     * Find the best route between two locations
-     */
-    suspend fun findRoute(
-        start: CampusLocation,
-        end: CampusLocation,
-        options: RouteOptions = RouteOptions()
-    ): RouteResult = withContext(Dispatchers.Default) {
-        if (!isReady()) {
-            return@withContext RouteResult.Error("Pathfinding engine not initialized")
-        }
-
-        // Check cache first
-        val cacheKey = generateCacheKey(start, end, options)
-        routeCache[cacheKey]?.let { cachedRoute ->
-            return@withContext RouteResult.Success(cachedRoute)
-        }
-
-        try {
-            val config = AStarPathfinder.PathfindingConfig(
-                preferAccessible = options.accessible,
-                preferOutdoor = options.preferOutdoor,
-                avoidStairs = options.avoidStairs,
-                walkingSpeed = options.walkingSpeed
-            )
-
-            val route = pathfinder?.findPath(start, end, config)
-
-            if (route != null) {
-                // Cache the result
-                cacheRoute(cacheKey, route)
-                RouteResult.Success(route)
-            } else {
-                RouteResult.NoRouteFound("No route found between the specified locations")
-            }
-        } catch (e: Exception) {
-            RouteResult.Error("Error calculating route: ${e.message}")
-        }
-    }
-
-    /**
-     * Find route to a building
-     */
-    suspend fun findRouteToBuilding(
-        start: CampusLocation,
-        building: Building,
-        options: RouteOptions = RouteOptions()
-    ): RouteResult {
-        // Find the nearest entrance
-        val destination = if (building.entrances.isNotEmpty()) {
-            findNearestEntrance(start, building.entrances)
-        } else {
-            building.location
-        }
-
-        return findRoute(start, destination, options)
-    }
-
-    /**
-     * Find multiple alternative routes
-     */
-    suspend fun findAlternativeRoutes(
-        start: CampusLocation,
-        end: CampusLocation,
-        maxAlternatives: Int = 3
-    ): List<Route> = withContext(Dispatchers.Default) {
-        if (!isReady()) {
-            return@withContext emptyList()
-        }
-
-        val routes = mutableListOf<Route>()
-
-        // Standard route
-        val standardConfig = AStarPathfinder.PathfindingConfig()
-        pathfinder?.findPath(start, end, standardConfig)?.let { routes.add(it) }
-
-        // Accessible route
-        val accessibleConfig = AStarPathfinder.PathfindingConfig(
-            preferAccessible = true,
-            avoidStairs = true
-        )
-        pathfinder?.findPath(start, end, accessibleConfig)?.let { route ->
-            if (!routes.any { isSimilarRoute(it, route) }) {
-                routes.add(route)
-            }
-        }
-
-        // Outdoor-preferred route
-        val outdoorConfig = AStarPathfinder.PathfindingConfig(
-            preferOutdoor = true
-        )
-        pathfinder?.findPath(start, end, outdoorConfig)?.let { route ->
-            if (!routes.any { isSimilarRoute(it, route) }) {
-                routes.add(route)
-            }
-        }
-
-        // Indoor-preferred route (for bad weather)
-        val indoorConfig = AStarPathfinder.PathfindingConfig(
-            preferOutdoor = false
-        )
-        pathfinder?.findPath(start, end, indoorConfig)?.let { route ->
-            if (!routes.any { isSimilarRoute(it, route) }) {
-                routes.add(route)
-            }
-        }
-
-        routes.take(maxAlternatives)
-    }
-
-    /**
-     * Find nearest point of interest
-     */
-    fun findNearestBuilding(
-        location: CampusLocation,
-        buildings: List<Building>,
-        type: BuildingType? = null
-    ): Building? {
-        val filteredBuildings = if (type != null) {
-            buildings.filter { it.type == type }
-        } else {
-            buildings
-        }
-
-        return filteredBuildings.minByOrNull { building ->
-            calculateDistance(location, building.location)
-        }
-    }
-
-    /**
-     * Calculate walking time between two points
-     */
-    suspend fun estimateWalkingTime(
-        start: CampusLocation,
-        end: CampusLocation,
-        walkingSpeed: Double = 1.4 // m/s
-    ): Long? {
-        val result = findRoute(start, end, RouteOptions(walkingSpeed = walkingSpeed))
-        return when (result) {
-            is RouteResult.Success -> result.route.estimatedTime
-            else -> null
-        }
-    }
-
-    /**
-     * Get distance to a location
-     */
-    fun getDirectDistance(from: CampusLocation, to: CampusLocation): Double {
-        return calculateDistance(from, to)
-    }
-
-    /**
-     * Check if two locations are within walking distance
-     */
-    fun isWithinWalkingDistance(
-        from: CampusLocation,
-        to: CampusLocation,
-        maxDistance: Double = 2000.0 // 2km default
-    ): Boolean {
-        return calculateDistance(from, to) <= maxDistance
-    }
-
-    /**
-     * Find the nearest graph node to a location
-     */
-    fun findNearestNode(location: CampusLocation): CampusGraph.GraphNode? {
-        return campusGraph?.findNearestNode(location)
-    }
-
-    /**
-     * Update a portion of the graph (for dynamic obstacles, closures, etc.)
-     */
-    fun updateGraphEdge(
-        fromId: String,
-        toId: String,
-        isAccessible: Boolean
-    ) {
-        // This would update the graph edge accessibility
-        // Useful for temporary closures, construction, etc.
-        // Implementation depends on CampusGraph supporting updates
-    }
-
-    /**
-     * Clear the route cache
-     */
-    fun clearCache() {
-        routeCache.clear()
-    }
-
-    /**
-     * Reset the engine
-     */
-    fun reset() {
-        campusGraph = null
-        pathfinder = null
-        isInitialized = false
-        routeCache.clear()
-    }
-
-    // ============== PRIVATE HELPER METHODS ==============
-
-    private fun findNearestEntrance(
-        location: CampusLocation,
-        entrances: List<CampusLocation>
-    ): CampusLocation {
-        return entrances.minByOrNull { entrance ->
-            calculateDistance(location, entrance)
-        } ?: entrances.first()
-    }
-
-    private fun calculateDistance(from: CampusLocation, to: CampusLocation): Double {
-        val earthRadius = 6371000.0 // meters
-
-        val lat1 = Math.toRadians(from.latitude)
-        val lat2 = Math.toRadians(to.latitude)
-        val deltaLat = Math.toRadians(to.latitude - from.latitude)
-        val deltaLon = Math.toRadians(to.longitude - from.longitude)
-
-        val a = kotlin.math.sin(deltaLat / 2).let { it * it } +
-                kotlin.math.cos(lat1) * kotlin.math.cos(lat2) *
-                kotlin.math.sin(deltaLon / 2).let { it * it }
-        val c = 2 * kotlin.math.atan2(kotlin.math.sqrt(a), kotlin.math.sqrt(1 - a))
-
-        return earthRadius * c
-    }
-
-    private fun isSimilarRoute(route1: Route, route2: Route): Boolean {
-        // Consider routes similar if they share more than 80% of waypoints
-        if (route1.waypoints.size != route2.waypoints.size) {
-            val sizeDiff = kotlin.math.abs(route1.waypoints.size - route2.waypoints.size)
-            if (sizeDiff > 2) return false
-        }
-
-        val sharedWaypoints = route1.waypoints.count { wp1 ->
-            route2.waypoints.any { wp2 ->
-                calculateDistance(wp1.location, wp2.location) < 15.0
-            }
-        }
-
-        val similarity = sharedWaypoints.toDouble() / route1.waypoints.size
-        return similarity > 0.8
-    }
-
-    private fun generateCacheKey(
-        start: CampusLocation,
-        end: CampusLocation,
-        options: RouteOptions
-    ): String {
-        return "${start.latitude},${start.longitude}-" +
-                "${end.latitude},${end.longitude}-" +
-                "${options.accessible}-${options.preferOutdoor}-${options.avoidStairs}"
-    }
-
-    private fun cacheRoute(key: String, route: Route) {
-        // Remove oldest entry if cache is full
-        if (routeCache.size >= maxCacheSize) {
-            routeCache.remove(routeCache.keys.first())
-        }
-        routeCache[key] = route
-    }
-}
-
-// ============== SUPPORTING DATA CLASSES ==============
-
-/**
- * Options for route calculation
- */
+// --- FIXED: Defined Data Classes Here ---
 data class RouteOptions(
     val accessible: Boolean = false,
     val preferOutdoor: Boolean = true,
     val avoidStairs: Boolean = false,
-    val walkingSpeed: Double = 1.4 // meters per second
+    val walkingSpeed: Double = 1.4
 )
 
-/**
- * Result of a route calculation
- */
 sealed class RouteResult {
     data class Success(val route: Route) : RouteResult()
-    data class NoRouteFound(val message: String) : RouteResult()
     data class Error(val message: String) : RouteResult()
+    data class NoRouteFound(val message: String) : RouteResult()
 }
 
-/**
- * Path node for graph construction
- */
-data class PathNode(
-    val id: String,
-    val location: CampusLocation
-)
+@Singleton
+class PathfindingEngine @Inject constructor() {
 
-/**
- * Path connection for graph construction
- */
-data class PathConnection(
-    val fromId: String,
-    val toId: String,
-    val isAccessible: Boolean = true
-)
+    private var campusGraph: CampusGraph? = null
+
+    fun initializeWithGraph(graph: CampusGraph) {
+        this.campusGraph = graph
+    }
+
+    fun findNearestNode(location: CampusLocation, type: CampusGraph.NodeType? = null): CampusGraph.GraphNode? {
+        return campusGraph?.findNearestNode(location, type)
+    }
+
+    fun findRoute(
+        start: CampusLocation,
+        end: CampusLocation,
+        options: RouteOptions = RouteOptions()
+    ): RouteResult {
+        val graph = campusGraph ?: return RouteResult.Error("Graph not initialized")
+
+        val startNode = graph.findNearestNode(start)
+        val endNode = graph.findNearestNode(end)
+
+        if (startNode == null || endNode == null) {
+            return RouteResult.NoRouteFound("Locations not near campus paths")
+        }
+
+        val pathNodes = runAStar(graph, startNode, endNode)
+            ?: return RouteResult.NoRouteFound("No path found")
+
+        val route = convertPathToRoute(pathNodes, start, end)
+        return RouteResult.Success(route)
+    }
+
+    // --- INTERNAL A* ALGORITHM ---
+    private fun runAStar(
+        graph: CampusGraph,
+        startNode: CampusGraph.GraphNode,
+        targetNode: CampusGraph.GraphNode
+    ): List<CampusGraph.GraphNode>? {
+        val openSet = PriorityQueue<NodeWrapper>()
+        val cameFrom = mutableMapOf<String, CampusGraph.GraphNode>()
+        val gScore = mutableMapOf<String, Double>().withDefault { Double.MAX_VALUE }
+
+        gScore[startNode.id] = 0.0
+        openSet.add(NodeWrapper(startNode, 0.0))
+
+        val visited = mutableSetOf<String>()
+
+        while (openSet.isNotEmpty()) {
+            val current = openSet.poll()?.node ?: break
+
+            if (current.id == targetNode.id) {
+                return reconstructPath(cameFrom, current)
+            }
+
+            if (visited.contains(current.id)) continue
+            visited.add(current.id)
+
+            graph.adjacencyList[current.id]?.forEach { edge ->
+                if (edge.isAccessible) {
+                    val tentativeG = gScore.getValue(current.id) + edge.distance
+                    val neighbor = graph.nodes[edge.toNodeId]
+
+                    if (neighbor != null && tentativeG < gScore.getValue(neighbor.id)) {
+                        cameFrom[neighbor.id] = current
+                        gScore[neighbor.id] = tentativeG
+                        val fScore = tentativeG + calculateHeuristic(neighbor.location, targetNode.location)
+                        openSet.add(NodeWrapper(neighbor, fScore))
+                    }
+                }
+            }
+        }
+        return null
+    }
+
+    private fun reconstructPath(cameFrom: Map<String, CampusGraph.GraphNode>, current: CampusGraph.GraphNode): List<CampusGraph.GraphNode> {
+        val path = mutableListOf(current)
+        var curr = current
+        while (cameFrom.containsKey(curr.id)) {
+            curr = cameFrom[curr.id]!!
+            path.add(0, curr)
+        }
+        return path
+    }
+
+    private fun convertPathToRoute(pathNodes: List<CampusGraph.GraphNode>, origin: CampusLocation, destination: CampusLocation): Route {
+        val waypoints = mutableListOf<Waypoint>()
+        val steps = mutableListOf<NavigationStep>()
+        var totalDist = 0.0
+
+        waypoints.add(Waypoint(origin, WaypointType.START, "Start"))
+
+        for (i in 0 until pathNodes.size - 1) {
+            val curr = pathNodes[i]
+            val next = pathNodes[i+1]
+            val dist = calculateHeuristic(curr.location, next.location)
+            totalDist += dist
+
+            steps.add(NavigationStep(
+                instruction = "Go to ${next.id}",
+                distance = dist,
+                direction = Direction.FORWARD,
+                startLocation = curr.location,
+                endLocation = next.location,
+                isIndoor = false
+            ))
+            waypoints.add(Waypoint(next.location, WaypointType.CONTINUE_STRAIGHT, ""))
+        }
+
+        waypoints.add(Waypoint(destination, WaypointType.CONTINUE_STRAIGHT, "Arrived"))
+
+        return Route(
+            id = "route_${System.currentTimeMillis()}",
+            origin = origin,
+            destination = destination,
+            waypoints = waypoints,
+            totalDistance = totalDist,
+            estimatedTime = (totalDist / 1.4).toLong(),
+            steps = steps
+        )
+    }
+
+    fun estimateWalkingTime(start: CampusLocation, end: CampusLocation, speed: Double = 1.4): Long? {
+        val result = findRoute(start, end)
+        return if (result is RouteResult.Success) {
+            (result.route.totalDistance / speed).toLong()
+        } else {
+            null
+        }
+    }
+
+    fun findAlternativeRoutes(start: CampusLocation, end: CampusLocation, max: Int): List<Route> {
+        val result = findRoute(start, end)
+        return if (result is RouteResult.Success) listOf(result.route) else emptyList()
+    }
+
+    private fun calculateHeuristic(p1: CampusLocation, p2: CampusLocation): Double {
+        val R = 6371000.0
+        val dLat = Math.toRadians(p2.latitude - p1.latitude)
+        val dLon = Math.toRadians(p2.longitude - p1.longitude)
+        val a = sin(dLat / 2).pow(2) + cos(Math.toRadians(p1.latitude)) * cos(Math.toRadians(p2.latitude)) * sin(dLon / 2).pow(2)
+        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+        return R * c
+    }
+
+    private data class NodeWrapper(val node: CampusGraph.GraphNode, val fScore: Double) : Comparable<NodeWrapper> {
+        override fun compareTo(other: NodeWrapper) = fScore.compareTo(other.fScore)
+    }
+}

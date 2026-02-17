@@ -7,6 +7,7 @@ import com.campus.arnav.data.model.CampusLocation
 import com.campus.arnav.data.model.Route
 import com.campus.arnav.data.repository.LocationRepository
 import com.campus.arnav.data.repository.NavigationRepository
+import com.campus.arnav.domain.pathfinding.RouteResult // FIXED: Added missing import
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -88,16 +89,24 @@ class NavigationViewModel @Inject constructor(
             }
 
             try {
-                val route = navigationRepository.calculateRoute(currentLocation, building.location)
+                // FIXED: Handle RouteResult (Success/Error) instead of checking for null
+                val result = navigationRepository.calculateRoute(currentLocation, building.location)
 
-                if (route != null) {
-                    _route.value = route
-                    _navigationState.value = NavigationState.Previewing(
-                        destination = building,
-                        route = route
-                    )
-                } else {
-                    _error.value = "Unable to calculate route"
+                when (result) {
+                    is RouteResult.Success -> {
+                        val route = result.route
+                        _route.value = route
+                        _navigationState.value = NavigationState.Previewing(
+                            destination = building,
+                            route = route
+                        )
+                    }
+                    is RouteResult.Error -> {
+                        _error.value = result.message
+                    }
+                    is RouteResult.NoRouteFound -> {
+                        _error.value = result.message
+                    }
                 }
             } catch (e: Exception) {
                 _error.value = e.message ?: "Unknown error"
