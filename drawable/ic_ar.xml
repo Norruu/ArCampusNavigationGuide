@@ -11,7 +11,7 @@
         android:pathData="M3,20l0,-3l-2,0l0,5l5,0l0,-2z"/>
     <path
         android:fillColor="#000000"
-        android:pathData="M21,4l0,-3l-5,0l0,2l3,0l0,3l2,0z"/>
+        android:pathData="M23,4l0,-2l-5,0l0,2l3,0l0,3l2,0z"/>
     <path
         android:fillColor="#000000"
         android:pathData="M21,20l-3,0l0,2l5,0l0,-5l-2,0z"/>

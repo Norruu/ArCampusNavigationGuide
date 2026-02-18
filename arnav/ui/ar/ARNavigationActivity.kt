@@ -1,60 +1,79 @@
 package com.campus.arnav.ui.ar
 
+import android.Manifest
 import android.os.Bundle
+import android.view.View
 import android.widget.Toast
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
-import com.campus.arnav.R
-import com.campus.arnav.data.model.Route
+import androidx.lifecycle.lifecycleScope
 import com.campus.arnav.databinding.ActivityArNavigationBinding
+import com.campus.arnav.util.ARCapabilityManager
+import com.campus.arnav.util.CompassManager
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.collectLatest
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class ARNavigationActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityArNavigationBinding
-    private var route: Route? = null
+    private val viewModel: ARViewModel by viewModels()
 
-    companion object {
-        const val EXTRA_ROUTE = "extra_route"
-    }
+    // Helper to access sensors (Compass)
+    @Inject lateinit var compassManager: CompassManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityArNavigationBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Get route from intent
-        route = intent.getParcelableExtra(EXTRA_ROUTE)
+        // 1. Check Mode
+        val isARCore = ARCapabilityManager.isARCoreSupported(this)
+        setupCameraMode(isARCore)
 
-        setupUI()
-    }
+        // 2. Start Sensors (Compass is needed for BOTH modes for direction)
+        compassManager.start { azimuth, _ ->
+            viewModel.onSensorHeadingChanged(azimuth)
+        }
 
-    private fun setupUI() {
-        binding.apply {
-            // Back button
-            fabBack.setOnClickListener {
-                finish()
-            }
-
-            // Show placeholder message
-            tvInstruction.text = "AR Navigation"
-            tvDistance.text = "AR feature coming soon"
-
-            // Display route info if available
-            route?.let { r ->
-                tvInstruction.text = "Navigate to destination"
-                tvDistance.text = "${r.totalDistance.toInt()}m remaining"
+        // 3. Observe ViewModel to update UI Overlay
+        lifecycleScope.launchWhenStarted {
+            viewModel.arrowRotation.collectLatest { rotation ->
+                // Smoothly rotate the arrow
+                binding.ivDirectionArrow.animate().rotation(rotation).setDuration(200).start()
             }
         }
 
-        Toast.makeText(this, "AR Navigation - Coming Soon", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launchWhenStarted {
+            viewModel.distanceToTarget.collectLatest { dist ->
+                binding.tvDistance.text = dist
+            }
+        }
+
+        binding.btnExitAr.setOnClickListener { finish() }
     }
 
-    override fun onResume() {
-        super.onResume()
+    private fun setupCameraMode(isARCore: Boolean) {
+        if (isARCore) {
+            // Initialize ARCore Session/Fragment here
+            // For now, let's stick to the Fallback mode code as it works on ALL devices
+            // and is easier to get running immediately.
+            setupSensorFallbackMode()
+            binding.tvArModeDebug.text = "AR Mode: ARCore (Supported)"
+        } else {
+            setupSensorFallbackMode()
+            binding.tvArModeDebug.text = "AR Mode: Sensor Fallback"
+        }
     }
 
-    override fun onPause() {
-        super.onPause()
+    private fun setupSensorFallbackMode() {
+        // Init CameraX Preview into binding.cameraPreviewView
+        // (Assuming you have a standard CameraX setup code)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        compassManager.stop()
     }
 }

@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.view.View // <--- IMPORT ADDED
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
@@ -35,7 +36,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var navController: NavController
 
-    // PREFERENCE KEYS
     companion object {
         private const val PREFS_NAME = "arnav_settings"
         private const val KEY_DARK_MODE = "is_dark_mode"
@@ -61,9 +61,8 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
 
-        // --- 1. LOAD SAVED THEME (Before super.onCreate) ---
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val isDark = prefs.getBoolean(KEY_DARK_MODE, false) // Default to Light (false)
+        val isDark = prefs.getBoolean(KEY_DARK_MODE, false)
 
         if (isDark) {
             AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
@@ -79,29 +78,31 @@ class MainActivity : AppCompatActivity() {
         val navHostFragment = supportFragmentManager
             .findFragmentById(R.id.nav_host_fragment) as NavHostFragment
         navController = navHostFragment.navController
+
+        // Setup Bottom Nav
         binding.bottomNavigation.setupWithNavController(navController)
 
-        binding.bottomNavigation.setupWithNavController(navController)
-
+        // Handle Satellite Mode & Navigation
         binding.bottomNavigation.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.navigation_satellite -> {
-                    // 1. Find the active MapFragment
                     val mapFragment = navHostFragment.childFragmentManager.fragments
                         .find { it is MapFragment } as? MapFragment
 
-                    // 2. Trigger the toggle
                     mapFragment?.toggleMapLayer()
-
-                    false // Return false: don't "switch" tabs, just run the toggle
+                    false
                 }
                 else -> {
-                    // Standard navigation for other items
-                    navController.navigate(item.itemId)
+                    if (item.itemId != binding.bottomNavigation.selectedItemId) {
+                        navController.navigate(item.itemId)
+                    }
                     true
                 }
             }
         }
+
+        // Prevent reloading the same fragment
+        binding.bottomNavigation.setOnItemReselectedListener { }
 
         checkPermissions()
 
@@ -109,27 +110,15 @@ class MainActivity : AppCompatActivity() {
             try {
                 val buildings = campusRepository.getAllBuildings()
                 campusPathfinding.initializeFromCampusPaths()
-                android.util.Log.d("ArNav", "System Initialized: ${buildings.size} buildings loaded.")
             } catch (e: Exception) {
-                android.util.Log.e("ArNav", "Initialization Failed", e)
+                e.printStackTrace()
             }
         }
     }
 
-    /**
-     * Call this from SettingsFragment to switch themes manually
-     */
-    fun toggleTheme(enableDarkMode: Boolean) {
-        // --- 2. SAVE PREFERENCE ---
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putBoolean(KEY_DARK_MODE, enableDarkMode).apply()
-
-        // Apply immediately
-        if (enableDarkMode) {
-            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
-        } else {
-            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
-        }
+    // --- FIX: Correct function name and use 'bottomNavigation' ---
+    fun setBottomNavVisibility(visible: Boolean) {
+        binding.bottomNavigation.visibility = if (visible) View.VISIBLE else View.GONE
     }
 
     private fun checkPermissions() {
@@ -156,6 +145,17 @@ class MainActivity : AppCompatActivity() {
         ).setAction("Grant") {
             checkPermissions()
         }.show()
+    }
+
+    fun toggleTheme(enableDarkMode: Boolean) {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(KEY_DARK_MODE, enableDarkMode).apply()
+
+        if (enableDarkMode) {
+            androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES)
+        } else {
+            androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO)
+        }
     }
 
     fun hasLocationPermission(): Boolean {

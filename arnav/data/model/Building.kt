@@ -24,7 +24,6 @@ enum class BuildingType {
     DORMITORY,
     SPORTS,
     ADMINISTRATIVE,
-    PARKING,
     LANDMARK
 }
 
