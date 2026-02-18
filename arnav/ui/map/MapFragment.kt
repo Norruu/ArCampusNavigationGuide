@@ -34,6 +34,7 @@ import com.google.android.material.snackbar.Snackbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import androidx.core.view.doOnLayout
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase
@@ -47,6 +48,7 @@ import org.osmdroid.views.overlay.Polyline
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import android.content.res.ColorStateList
+import androidx.fragment.app.setFragmentResultListener
 import com.campus.arnav.data.model.BuildingType
 
 @AndroidEntryPoint
@@ -154,6 +156,13 @@ class MapFragment : Fragment() {
         setupLocationOverlay()
         setupUI()
         observeViewModel()
+
+        setFragmentResultListener("search_request") { key, bundle ->
+            val buildingId = bundle.getString("building_id")
+            if (buildingId != null) {
+                viewModel.selectBuildingById(buildingId)
+            }
+        }
     }
 
     private fun configureOSMDroid() {
@@ -474,7 +483,16 @@ class MapFragment : Fragment() {
                 intent.putExtra(ARNavigationActivity.EXTRA_ROUTE, event.route)
                 startActivity(intent)
             }
+            is MapUiEvent.MoveCameraTo -> {
+                mapView.controller.animateTo(event.location, 16.5, 100L)
 
+                viewLifecycleOwner.lifecycleScope.launch {
+                    delay(9500)
+
+                        viewModel.setFollowingUser(true)
+                    //}
+                }
+            }
             is MapUiEvent.ShowError -> Snackbar.make(
                 binding.root,
                 event.message,

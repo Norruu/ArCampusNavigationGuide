@@ -165,6 +165,26 @@ class MapViewModel @Inject constructor(
         calculateRouteToBuilding(building)
     }
 
+    // Inside MapViewModel.kt
+
+    fun selectBuildingById(buildingId: String) {
+        val building = allBuildingsCache.find { it.id == buildingId }
+        if (building != null) {
+            onSearchResultClicked(building)
+        }
+    }
+
+    fun onSearchResultClicked(building: Building) {
+        // A. Select the building (Opens the panel)
+        onBuildingSelected(building)
+
+        // B. Fly the camera to the location
+        viewModelScope.launch {
+            val target = GeoPoint(building.location.latitude, building.location.longitude)
+            _uiEvent.emit(MapUiEvent.MoveCameraTo(target))
+        }
+    }
+
     private fun calculateRouteToBuilding(building: Building) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -400,4 +420,5 @@ sealed class MapUiEvent {
     data class WaypointReached(val index: Int) : MapUiEvent()
     data class LaunchARNavigation(val route: Route) : MapUiEvent()
     data class ShowError(val message: String) : MapUiEvent()
+    data class MoveCameraTo(val location: GeoPoint) : MapUiEvent()
 }

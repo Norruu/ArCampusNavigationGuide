@@ -22,6 +22,8 @@ import com.campus.arnav.databinding.FragmentSearchBinding
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import androidx.core.os.bundleOf
+import androidx.fragment.app.setFragmentResult
 
 @AndroidEntryPoint
 class SearchFragment : Fragment() {
@@ -188,19 +190,11 @@ class SearchFragment : Fragment() {
         hideKeyboard()
         viewModel.addToRecentSearches(building)
 
-        // TODO: Navigate to map with selected building
-        // Option 1: Using Safe Args (recommended)
-        // val action = SearchFragmentDirections.actionSearchFragmentToMapFragment(building)
-        // findNavController().navigate(action)
+        setFragmentResult("search_request", bundleOf("building_id" to building.id))
 
-        // Option 2: Using Bundle
-        // val bundle = Bundle().apply {
-        //     putParcelable("selected_building", building)
-        //     putString("building_id", building.id)
-        // }
-        // findNavController().navigate(R.id.action_searchFragment_to_mapFragment, bundle)
+        // Navigate back to Map
+        findNavController().popBackStack()
 
-        // For now, just go back
         findNavController().navigateUp()
     }
 
