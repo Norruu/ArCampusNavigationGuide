@@ -29,7 +29,7 @@
             android:id="@+id/tvTargetName"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            tools:text="Navigating to Library"
+            tools:text="Navigating to Destination"
             android:textColor="#FFFFFF"
             android:textSize="22sp"
             android:textStyle="bold"
@@ -37,19 +37,10 @@
             android:shadowRadius="8"/>
 
         <TextView
-            android:id="@+id/tvInstruction"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="#DDFFFFFF"
-            android:textSize="16sp"
-            android:shadowColor="#000000"
-            android:shadowRadius="8"/>
-
-        <TextView
             android:id="@+id/tvDistance"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            tools:text="150 m"
+            tools:text="0 m"
             android:textColor="#FFFFFF"
             android:textSize="40sp"
             android:textStyle="bold"
