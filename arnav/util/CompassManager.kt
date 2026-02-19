@@ -5,51 +5,84 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlin.math.abs
 
-class CompassManager(context: Context) : SensorEventListener {
+@Singleton
+class CompassManager @Inject constructor(
+    @ApplicationContext private val context: Context
+) : SensorEventListener {
 
-    private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-    private val rotationVectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+    private var sensorManager: SensorManager? = null
+    private var accelerometer: Sensor? = null
+    private var magnetometer: Sensor? = null
 
-    // UPDATED: Now defines a callback with TWO parameters: (Float, Boolean)
+    private val gravity = FloatArray(3)
+    private val geomagnetic = FloatArray(3)
+
+    private var hasGravity = false
+    private var hasGeomagnetic = false
+
     private var listener: ((Float, Boolean) -> Unit)? = null
 
-    fun start(onOrientationChanged: (Float, Boolean) -> Unit) {
+    init {
+        sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        magnetometer = sensorManager?.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
+    }
+
+    fun start(onOrientationChanged: (azimuth: Float, isFlat: Boolean) -> Unit) {
+        if (listener != null) return // Already started
+
         listener = onOrientationChanged
-        rotationVectorSensor?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
-        }
+
+        sensorManager?.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI)
+        sensorManager?.registerListener(this, magnetometer, SensorManager.SENSOR_DELAY_UI)
     }
 
     fun stop() {
-        sensorManager.unregisterListener(this)
+        sensorManager?.unregisterListener(this)
         listener = null
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
-        if (event?.sensor?.type == Sensor.TYPE_ROTATION_VECTOR) {
-            val rotationMatrix = FloatArray(9)
-            val orientation = FloatArray(3)
+        event ?: return
 
-            SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
-            SensorManager.getOrientation(rotationMatrix, orientation)
+        if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
+            System.arraycopy(event.values, 0, gravity, 0, 3)
+            hasGravity = true
+        } else if (event.sensor.type == Sensor.TYPE_MAGNETIC_FIELD) {
+            System.arraycopy(event.values, 0, geomagnetic, 0, 3)
+            hasGeomagnetic = true
+        }
 
-            // 1. Azimuth (Rotation)
-            val azimuthDeg = Math.toDegrees(orientation[0].toDouble()).toFloat()
-            val finalAzimuth = (azimuthDeg + 360) % 360
+        if (hasGravity && hasGeomagnetic) {
+            val R = FloatArray(9)
+            val I = FloatArray(9)
 
-            // 2. Pitch and Roll (Tilt/Flatness)
-            val pitch = Math.toDegrees(orientation[1].toDouble())
-            val roll = Math.toDegrees(orientation[2].toDouble())
+            if (SensorManager.getRotationMatrix(R, I, gravity, geomagnetic)) {
+                val orientation = FloatArray(3)
+                SensorManager.getOrientation(R, orientation)
 
-            // Check if phone is flat (< 35 degrees tilt)
-            val isFlat = abs(pitch) < 35 && abs(roll) < 35
+                // Convert radians to degrees
+                var azimuth = Math.toDegrees(orientation[0].toDouble()).toFloat()
 
-            // Send BOTH values to MapFragment
-            listener?.invoke(-finalAzimuth, isFlat)
+                // Normalize to 0-360
+                azimuth = (azimuth + 360) % 360
+
+                // Detect if phone is flat (pitch/roll check)
+                // Pitch is orientation[1], Roll is orientation[2]
+                val pitch = Math.toDegrees(orientation[1].toDouble())
+                val roll = Math.toDegrees(orientation[2].toDouble())
+                val isFlat = abs(pitch) < 25 && abs(roll) < 25
+
+                listener?.invoke(azimuth, isFlat)
+            }
         }
     }
 
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+    }
 }

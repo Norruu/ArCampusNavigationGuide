@@ -120,8 +120,7 @@ class SearchBottomSheet : BottomSheetDialogFragment() {
             CategoryItem("Academic", BuildingType.ACADEMIC, R.drawable.ic_school),
             CategoryItem("Library", BuildingType.LIBRARY, R.drawable.ic_library),
             CategoryItem("Food", BuildingType.CAFETERIA, R.drawable.ic_restaurant),
-            CategoryItem("Sports", BuildingType.SPORTS, R.drawable.ic_sports),
-            CategoryItem("Parking", BuildingType.PARKING, R.drawable.ic_parking)
+            CategoryItem("Sports", BuildingType.SPORTS, R.drawable.ic_sports)
         )
 
         binding.chipGroupCategories.removeAllViews()

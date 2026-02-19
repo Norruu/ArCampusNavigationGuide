@@ -317,7 +317,6 @@ class NavigationBottomSheet : BottomSheetDialogFragment() {
             BuildingType.DORMITORY -> R.drawable.ic_home
             BuildingType.SPORTS -> R.drawable.ic_sports
             BuildingType.ADMINISTRATIVE -> R.drawable.ic_business
-            BuildingType.PARKING -> R.drawable.ic_parking
             BuildingType.LANDMARK -> R.drawable.ic_landmark
         }
     }

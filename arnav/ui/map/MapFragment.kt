@@ -327,7 +327,14 @@ class MapFragment : Fragment() {
         when (event) {
             is MapUiEvent.LaunchARNavigation -> {
                 val intent = Intent(requireContext(), ARNavigationActivity::class.java)
-                intent.putExtra(ARNavigationActivity.EXTRA_ROUTE, event.route)
+
+                // Get the final destination coordinates from the route
+                val dest = event.route.waypoints.last().location
+
+                intent.putExtra("TARGET_LAT", dest.latitude)
+                intent.putExtra("TARGET_LON", dest.longitude)
+                intent.putExtra("TARGET_NAME", event.destinationName)
+
                 startActivity(intent)
             }
             is MapUiEvent.MoveCameraTo -> {
