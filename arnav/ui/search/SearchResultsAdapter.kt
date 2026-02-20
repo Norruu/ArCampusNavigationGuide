@@ -48,7 +48,6 @@ class SearchResultsAdapter(
                 BuildingType.ACADEMIC -> R.drawable.ic_school
                 BuildingType.LIBRARY -> R.drawable.ic_library
                 BuildingType.CAFETERIA -> R.drawable.ic_restaurant
-                BuildingType.DORMITORY -> R.drawable.ic_home
                 BuildingType.SPORTS -> R.drawable.ic_sports
                 BuildingType.ADMINISTRATIVE -> R.drawable.ic_business
                 BuildingType.LANDMARK -> R.drawable.ic_landmark

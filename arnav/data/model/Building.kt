@@ -21,7 +21,6 @@ enum class BuildingType {
     ACADEMIC,
     LIBRARY,
     CAFETERIA,
-    DORMITORY,
     SPORTS,
     ADMINISTRATIVE,
     LANDMARK

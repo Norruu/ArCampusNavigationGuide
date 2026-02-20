@@ -18,38 +18,31 @@ object CampusPaths {
         WALKWAY
     }
 
-    // DEFINING CAMPUS PATHS - Update these coordinates to match your actual campus
+    // --- 1. SHARED INTERSECTION NODES ---
+    // By using exact, shared variables, we guarantee the routing graph is 100% connected
+    private val nodeMainGate = GeoPoint(9.847753, 122.887348)
+    private val nodeAdminEndHallway = GeoPoint(9.852341, 122.890256)
+    private val nodeMuseum = GeoPoint(9.853487, 122.890143)
+    private val nodeGymIntersection = GeoPoint(9.853662, 122.888087)
+    private val nodeBackOfGym = GeoPoint(9.853556, 122.887148)
+    private val nodeBankalDrom = GeoPoint(9.852121, 122.887101)
+    private val nodeLukay = GeoPoint(9.850483, 122.885598)
+    private val nodeCoeHallway = GeoPoint(9.848964, 122.888126)
+    private val nodeITBuilding = GeoPoint(9.854445, 122.888603)
+    private val nodeBuildingH = GeoPoint(9.852204, 122.886163)
+    private val nodePao = GeoPoint(9.854959, 122.887644)
+    private val nodeMarzland = GeoPoint(9.855337, 122.886958)
+    private val nodePool = GeoPoint(9.852977, 122.890995)
+
+
+    // --- 2. CONNECTED CAMPUS PATHS ---
     val campusPaths = listOf(
 
         // Main entrance to Admin Building End Hallway
         Path(
             id = "mg-ehw_ad",
             name = "maingate-ehw_admin",
-            points = listOf(
-                GeoPoint(9.847753, 122.887348),   // Main gate
-                GeoPoint(9.852341, 122.890256)    // End Hallway Admin Building
-            ),
-            type = PathType.MAIN_ROAD
-        ),
-
-        Path(
-            id = "BG-to-Gym",
-            name = "Backofgym-Gym",
-            points = listOf(
-                GeoPoint(9.8535565134402, 122.88714843882991),   // Back of Gym
-                GeoPoint(9.85313539824331, 122.88773534398655)    // Gym road
-            ),
-            type = PathType.MAIN_ROAD
-        ),
-
-        // Between Admin Building and Gym Intersection
-        Path(
-            id = "between-mg-ehw_ad",
-            name = "between-maingate-ehw_admin",
-            points = listOf(
-                GeoPoint(9.852680, 122.889757),  // Between End Hallway Admin Building
-                GeoPoint(9.853487375231582, 122.89014312114),  // Front of Museum
-            ),
+            points = listOf(nodeMainGate, nodeAdminEndHallway),
             type = PathType.MAIN_ROAD
         ),
 
@@ -57,10 +50,15 @@ object CampusPaths {
         Path(
             id = "ehw_admin-Igym",
             name = "admin-igym",
-            points = listOf(
-                GeoPoint(9.852341, 122.890256),   // End Hallway Admin Building
-                GeoPoint(9.853662, 122.888087)    // Gym Intersection
-            ),
+            points = listOf(nodeAdminEndHallway, nodeGymIntersection),
+            type = PathType.MAIN_ROAD
+        ),
+
+        // Admin End Hallway to Museum (Snapped to connect to the main network)
+        Path(
+            id = "admin-to-museum",
+            name = "admin-museum",
+            points = listOf(nodeAdminEndHallway, nodeMuseum),
             type = PathType.MAIN_ROAD
         ),
 
@@ -68,22 +66,28 @@ object CampusPaths {
         Path(
             id = "Igym-lukay_coe",
             name = "igym-lukay_coe",
-            points = listOf(
-                GeoPoint(9.853662, 122.888087),  // Gym Intersection
-                GeoPoint(9.852121, 122.887101),  // Bankal Drom
-                GeoPoint(9.850483, 122.885598)   // Lukay Engineering Building
-            ),
+            points = listOf(nodeGymIntersection, nodeBankalDrom, nodeLukay),
             type = PathType.MAIN_ROAD
         ),
 
-        // Gym Intersection to IT Building
+        // Gym Intersection to IT Building (Combined with Library Road for a smooth curve)
         Path(
             id = "Igym-IT",
             name = "igym-IT",
             points = listOf(
-                GeoPoint(9.853662, 122.888087),  // Gym Intersection
-                GeoPoint(9.854445, 122.888603)   // IT Building
+                nodeGymIntersection,
+                GeoPoint(9.853620, 122.888374), // Smooth curve point
+                GeoPoint(9.854292, 122.888760), // Smooth curve point
+                nodeITBuilding
             ),
+            type = PathType.MAIN_ROAD
+        ),
+
+        // Back of Gym to Gym Intersection (Snapped to remove the small gap)
+        Path(
+            id = "BG-to-Gym",
+            name = "Backofgym-Gym",
+            points = listOf(nodeBackOfGym, nodeGymIntersection),
             type = PathType.MAIN_ROAD
         ),
 
@@ -91,72 +95,59 @@ object CampusPaths {
         Path(
             id = "lukay_coe-HW",
             name = "lukay_coe-COE",
-            points = listOf(
-                GeoPoint(9.850483, 122.885598),   // Lukay Engineering Building
-                GeoPoint(9.848964238285093, 122.88812607495888)    // Halllway
-            ),
+            points = listOf(nodeLukay, nodeCoeHallway),
             type = PathType.MAIN_ROAD
         ),
 
-        // Lukay to Building H (Walkway)
+        // Bankal Drom to Building H (Snapped start to connect to main road)
         Path(
             id = "lukay-to-bh",
             name = "lukay-to-bh",
-            points = listOf(
-                GeoPoint(9.852204, 122.886163),
-                GeoPoint(9.852121, 122.886243)
-            ),
+            points = listOf(nodeBankalDrom, nodeBuildingH),
             type = PathType.WALKWAY
         ),
 
-        //Marzland to pool
-        Path(
-            id = "Marzland-to-pool",
-            name = "Marzland-to-pool",
-            points = listOf(
-                GeoPoint(9.855337262336496, 122.88695889997297),
-                GeoPoint(9.8529774944415, 122.89099593664268)
-            ),
-            type = PathType.WALKWAY
-        ),
-
-        Path(
-            id = "Cafeteria-to-Caf",
-            name = "Cafeteria-to-Caf",
-            points = listOf(
-                GeoPoint(9.853232820539615, 122.89054821330097),
-                GeoPoint(9.854420740778087, 122.89122761982317),
-                GeoPoint(9.854581577074951, 122.89077331332565)
-            ),
-            type = PathType.WALKWAY
-        ),
-
+        // PAO to Lukay Walkway (Weaved through the Back of Gym node to stay connected)
         Path(
             id = "Pao-to-lukay",
             name = "Pao-to-lukay",
             points = listOf(
-                GeoPoint(9.854959854150174, 122.8876441157296),
-                GeoPoint(9.853612109710708, 122.88721496226768),
-                GeoPoint(9.851701993820244, 122.88573940515217),
-                GeoPoint(9.851274903213357, 122.8863886987087)
+                nodePao,
+                nodeBackOfGym,
+                GeoPoint(9.851701, 122.885739), // Walkway intermediate point
+                nodeLukay
             ),
             type = PathType.WALKWAY
         ),
 
+        // Marzland to PAO (Tied floating Marzland location into the PAO node)
         Path(
-            id = "Mainroad-to-Libraryroad",
-            name = "Mainroad-to-Libraryroad",
+            id = "Marzland-to-pao",
+            name = "Marzland-to-pao",
+            points = listOf(nodeMarzland, nodePao),
+            type = PathType.WALKWAY
+        ),
+
+        // Museum to Pool (Tied floating Pool location into the Museum node)
+        Path(
+            id = "Museum-to-pool",
+            name = "Museum-to-pool",
+            points = listOf(nodeMuseum, nodePool),
+            type = PathType.WALKWAY
+        ),
+
+        // Museum to Cafeteria (Snapped start to Museum to connect it to the network)
+        Path(
+            id = "Cafeteria-to-Caf",
+            name = "Cafeteria-to-Caf",
             points = listOf(
-                GeoPoint(9.854292839038363, 122.88876098610861),
-                GeoPoint(9.853620152078895, 122.88837497359208)
+                nodeMuseum,
+                GeoPoint(9.854420, 122.891227),
+                GeoPoint(9.854581, 122.890773)
             ),
             type = PathType.WALKWAY
         )
     )
-
-
-
-
 
     /**
      * Find path between two locations using campus paths
