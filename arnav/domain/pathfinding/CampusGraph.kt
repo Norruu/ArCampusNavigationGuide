@@ -55,4 +55,39 @@ class CampusGraph {
         val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
         return R * c
     }
+
+    /**
+     * Injects a temporary node directly onto an existing road edge.
+     */
+    fun addTemporaryStartNode(
+        tempNode: GraphNode,
+        nodeAId: String,
+        nodeBId: String,
+        distToA: Double,
+        distToB: Double
+    ) {
+        nodes[tempNode.id] = tempNode
+        // Connect the temporary node to the two ends of the road segment
+        adjacencyList[tempNode.id] = mutableListOf(
+            Edge(nodeAId, distToA, true),
+            Edge(nodeBId, distToB, true)
+        )
+
+        // Add bidirectional connections back to the temp node
+        adjacencyList[nodeAId]?.add(Edge(tempNode.id, distToA, true))
+        adjacencyList[nodeBId]?.add(Edge(tempNode.id, distToB, true))
+    }
+
+    /**
+     * Cleans up the graph after routing is complete.
+     */
+    fun removeTemporaryNode(nodeId: String) {
+        // Remove references from neighboring nodes
+        adjacencyList[nodeId]?.forEach { edge ->
+            adjacencyList[edge.toNodeId]?.removeAll { it.toNodeId == nodeId }
+        }
+        // Remove the node itself
+        adjacencyList.remove(nodeId)
+        nodes.remove(nodeId)
+    }
 }

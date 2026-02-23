@@ -27,7 +27,7 @@ object CampusDataProvider {
                 location = CampusLocation("lib", 9.854278907693391, 122.88931068697471),
                 type = BuildingType.LIBRARY,
                 entrances = listOf(
-                    CampusLocation("lib_entrance_main", 9.854278907693391, 122.88931068697471)
+                    CampusLocation("lib_entrance_main", 9.854375603699514, 122.88858627931438)
                 )
             ))
             .addBuilding(Building(
@@ -38,7 +38,7 @@ object CampusDataProvider {
                 location = CampusLocation("cas", 9.853393750047964, 122.88944237254098),
                 type = BuildingType.ACADEMIC,
                 entrances = listOf(
-                    CampusLocation("cas_entrance", 9.853393750047964, 122.88944237254098)
+                    CampusLocation("cas_entrance", 9.852820903662368, 122.88976217632987)
                 )
             ))
             .addBuilding(Building(
@@ -49,7 +49,7 @@ object CampusDataProvider {
                 location = CampusLocation("coe", 9.849504528210602, 122.88779694312122),
                 type = BuildingType.ACADEMIC,
                 entrances = listOf(
-                    CampusLocation("coe_entrance", 9.849504528210602, 122.88779694312122)
+                    CampusLocation("coe_entrance", 9.849023816985406, 122.88810074757524)
                 )
             ))
             .addBuilding(Building(
@@ -60,7 +60,7 @@ object CampusDataProvider {
                 location = CampusLocation("coted", 9.853941591408363, 122.89044466095176),
                 type = BuildingType.ACADEMIC,
                 entrances = listOf(
-                    CampusLocation("coted_entrance", 9.853941591408363, 122.89044466095176)
+                    CampusLocation("coted_entrance", 9.85361320364412, 122.89080151759343)
                 )
             ))
             .addBuilding(Building(
@@ -71,7 +71,7 @@ object CampusDataProvider {
                 location = CampusLocation("caf", 9.850113664121954, 122.88818988673896),
                 type = BuildingType.ACADEMIC,
                 entrances = listOf(
-                    CampusLocation("caf_entrance", 9.850113664121954, 122.88818988673896)
+                    CampusLocation("caf_entrance", 9.849921812153115, 122.88854051709363)
                 )
             ))
             .addBuilding(Building(
@@ -82,7 +82,7 @@ object CampusDataProvider {
                 location = CampusLocation("crim", 9.850355468306018, 122.88925472370697),
                 type = BuildingType.ACADEMIC,
                 entrances = listOf(
-                    CampusLocation("crim_entrance", 9.850355468306018, 122.88925472370697)
+                    CampusLocation("crim_entrance", 9.849023816985406, 122.88810074757524)
                 )
             ))
             .addBuilding(Building(
@@ -93,7 +93,7 @@ object CampusDataProvider {
                 location = CampusLocation("admin_new", 9.85282437919445, 122.89086729646579),
                 type = BuildingType.ADMINISTRATIVE,
                 entrances = listOf(
-                    CampusLocation("admin_entrance", 9.85282437919445, 122.89086729646579)
+                    CampusLocation("admin_entrance", 9.853134834079396, 122.89070289397206)
                 )
             ))
             .addBuilding(Building(
@@ -104,7 +104,7 @@ object CampusDataProvider {
                 location = CampusLocation("admin_old", 9.852863662387657, 122.89044785066042),
                 type = BuildingType.ADMINISTRATIVE,
                 entrances = listOf(
-                    CampusLocation("admin_old_entrance", 9.852863662387657, 122.89044785066042)
+                    CampusLocation("admin_old_entrance", 9.853134834079396, 122.89070289397206)
                 )
             ))
             .addBuilding(Building(
@@ -115,7 +115,7 @@ object CampusDataProvider {
                 location = CampusLocation("registrar", 9.853254215951052, 122.88982102069603),
                 type = BuildingType.ADMINISTRATIVE,
                 entrances = listOf(
-                    CampusLocation("registrar_entrance", 9.853254215951052, 122.88982102069603)
+                    CampusLocation("registrar_entrance", 9.853456238693987, 122.89013391151813)
                 )
             ))
             .addBuilding(Building(
@@ -126,7 +126,7 @@ object CampusDataProvider {
                 location = CampusLocation("hub", 9.853590668411169, 122.88866477231646),
                 type = BuildingType.CAFETERIA,
                 entrances = listOf(
-                    CampusLocation("hub_entrance", 9.853590668411169, 122.88866477231646)
+                    CampusLocation("hub_entrance", 9.853695423330025, 122.88819178482031)
                 )
             ))
             .addBuilding(Building(
@@ -137,7 +137,7 @@ object CampusDataProvider {
                 location = CampusLocation("cafeteria", 9.853325632397336, 122.89097574633368),
                 type = BuildingType.CAFETERIA,
                 entrances = listOf(
-                    CampusLocation("cafeteria_entrance", 9.853325632397336, 122.89097574633368)
+                    CampusLocation("cafeteria_entrance", 9.853134834079396, 122.89070289397206)
                 )
             ))
             .addBuilding(Building(
@@ -148,7 +148,7 @@ object CampusDataProvider {
                 location = CampusLocation("gym", 9.853530434736115, 122.88780706137088),
                 type = BuildingType.SPORTS,
                 entrances = listOf(
-                    CampusLocation("gym_entrance", 9.853530434736115, 122.88780706137088)
+                    CampusLocation("gym_entrance", 9.853424695042786, 122.88799352752392)
                 )
             ))
             .addBuilding(Building(
@@ -159,7 +159,7 @@ object CampusDataProvider {
                 location = CampusLocation("pool", 9.853471765633156, 122.89153553902976),
                 type = BuildingType.SPORTS,
                 entrances = listOf(
-                    CampusLocation("pool_entrance", 9.853471765633156, 122.89153553902976)
+                    CampusLocation("pool_entrance", 9.85361320364412, 122.89080151759343)
                 )
             ))
             .addBuilding(Building(
@@ -170,7 +170,7 @@ object CampusDataProvider {
                 location = CampusLocation("clinic", 9.851165444957411, 122.88894090526546),
                 type = BuildingType.ADMINISTRATIVE,
                 entrances = listOf(
-                    CampusLocation("clinic_entrance", 9.851165444957411, 122.88894090526546)
+                    CampusLocation("clinic_entrance", 9.852820903662368, 122.88976217632987)
                 )
             ))
             .addBuilding(Building(
@@ -181,7 +181,7 @@ object CampusDataProvider {
                 location = CampusLocation("museum", 9.853806457644907, 122.89035534929693),
                 type = BuildingType.LANDMARK,
                 entrances = listOf(
-                    CampusLocation("museum_entrance", 9.853806457644907, 122.89035534929693)
+                    CampusLocation("museum_entrance", 9.853456238693987, 122.89013391151813)
                 )
             ))
 
@@ -200,7 +200,7 @@ object CampusDataProvider {
             // --- CONNECTIONS ---
             // Connect main pathways
             .connectPath("main_gate", "path_south")
-            .connectPath("house_gate", "path_south")// Connect the Gate to the internal road
+            .connectPath("house_gate", "path_south")
             .connectPath("path_south", "path_center")
             .connectPath("path_center", "path_north")
             .connectPath("path_center", "path_east")
@@ -228,7 +228,7 @@ object CampusDataProvider {
             location = CampusLocation("gate", 9.847875487714289, 122.88741459467961),
             type = BuildingType.LANDMARK,
             entrances = listOf(
-                CampusLocation("gate_entrance", 9.847875487714289, 122.88741459467961)
+                CampusLocation("gate_entrance", 9.847738179314176, 122.88731934502138)
             )
         ),
 
@@ -241,7 +241,7 @@ object CampusDataProvider {
             location = CampusLocation("caf", 9.850113664121954, 122.88818988673896),
             type = BuildingType.ACADEMIC,
             entrances = listOf(
-                CampusLocation("caf_entrance", 9.850113664121954, 122.88818988673896)
+                CampusLocation("caf_entrance", 9.849921812153115, 122.88854051709363)
             )
         ),
         Building(
@@ -252,7 +252,18 @@ object CampusDataProvider {
             location = CampusLocation("crim", 9.850355468306018, 122.88925472370697),
             type = BuildingType.ACADEMIC,
             entrances = listOf(
-                CampusLocation("crim_entrance", 9.850355468306018, 122.88925472370697)
+                CampusLocation("crim_entrance", 9.849023816985406, 122.88810074757524)
+            )
+        ),
+        Building(
+            id = "tyngge",
+            name = "tyngge",
+            shortName = "tyngge",
+            description = "Sari-Sari",
+            location = CampusLocation("crim", 9.852216110920974, 122.88619915401392),
+            type = BuildingType.LANDMARK,
+            entrances = listOf(
+                CampusLocation("crim_entrance", 9.852237323884994, 122.88614891620882)
             )
         ),
         Building(
@@ -263,7 +274,7 @@ object CampusDataProvider {
             location = CampusLocation("cas", 9.853393750047964, 122.88944237254098),
             type = BuildingType.ACADEMIC,
             entrances = listOf(
-                CampusLocation("cas_entrance", 9.853393750047964, 122.88944237254098)
+                CampusLocation("cas_entrance", 9.852820903662368, 122.88976217632987)
             )
         ),
         Building(
@@ -274,7 +285,7 @@ object CampusDataProvider {
             location = CampusLocation("coted", 9.853941591408363, 122.89044466095176),
             type = BuildingType.ACADEMIC,
             entrances = listOf(
-                CampusLocation("coted_entrance", 9.853941591408363, 122.89044466095176)
+                CampusLocation("coted_entrance", 9.85361320364412, 122.89080151759343)
             )
         ),
         Building(
@@ -285,7 +296,7 @@ object CampusDataProvider {
             location = CampusLocation("coe", 9.849504528210602, 122.88779694312122),
             type = BuildingType.ACADEMIC,
             entrances = listOf(
-                CampusLocation("coe_entrance", 9.849504528210602, 122.88779694312122)
+                CampusLocation("coe_entrance", 9.849023816985406, 122.88810074757524)
             )
         ),
         Building(
@@ -296,7 +307,7 @@ object CampusDataProvider {
             location = CampusLocation("nib", 9.854059440574803, 122.89011771650271),
             type = BuildingType.ACADEMIC,
             entrances = listOf(
-                CampusLocation("nib_entrance", 9.854059440574803, 122.89011771650271)
+                CampusLocation("nib_entrance", 9.853456238693987, 122.89013391151813)
             )
         ),
         Building(
@@ -307,7 +318,7 @@ object CampusDataProvider {
             location = CampusLocation("it", 9.85443603974652, 122.88823894709127),
             type = BuildingType.ACADEMIC,
             entrances = listOf(
-                CampusLocation("it_entrance", 9.85443603974652, 122.88823894709127)
+                CampusLocation("it_entrance", 9.854375603699514, 122.88858627931438)
             )
         ),
         Building(
@@ -318,7 +329,7 @@ object CampusDataProvider {
             location = CampusLocation("ansi", 9.853983760853357, 122.88819274501164),
             type = BuildingType.ACADEMIC,
             entrances = listOf(
-                CampusLocation("ansi_entrance", 9.853983760853357, 122.88819274501164)
+                CampusLocation("ansi_entrance", 9.853695423330025, 122.88819178482031)
             )
         ),
         Building(
@@ -329,7 +340,7 @@ object CampusDataProvider {
             location = CampusLocation("caf2", 9.85465339974468, 122.8908194509482),
             type = BuildingType.ACADEMIC,
             entrances = listOf(
-                CampusLocation("caf2_entrance", 9.85465339974468, 122.8908194509482)
+                CampusLocation("caf2_entrance", 9.854599838680414, 122.89080151759343)
             )
         ),
         Building(
@@ -340,7 +351,7 @@ object CampusDataProvider {
             location = CampusLocation("crim2", 9.849557381700073, 122.88873973958049),
             type = BuildingType.ACADEMIC,
             entrances = listOf(
-                CampusLocation("crim2_entrance", 9.849557381700073, 122.88873973958049)
+                CampusLocation("crim2_entrance", 9.849023816985406, 122.88810074757524)
             )
         ),
         Building(
@@ -351,7 +362,7 @@ object CampusDataProvider {
             location = CampusLocation("hm", 9.85212076560046, 122.89042819014846),
             type = BuildingType.ACADEMIC,
             entrances = listOf(
-                CampusLocation("hm_entrance", 9.85212076560046, 122.89042819014846)
+                CampusLocation("hm_entrance", 9.852492023851111, 122.89027805372855)
             )
         ),
 
@@ -364,7 +375,7 @@ object CampusDataProvider {
             location = CampusLocation("lib", 9.854278907693391, 122.88931068697471),
             type = BuildingType.LIBRARY,
             entrances = listOf(
-                CampusLocation("lib_entrance", 9.854278907693391, 122.88931068697471)
+                CampusLocation("lib_entrance", 9.854375603699514, 122.88858627931438)
             )
         ),
 
@@ -377,7 +388,7 @@ object CampusDataProvider {
             location = CampusLocation("admin_new", 9.85282437919445, 122.89086729646579),
             type = BuildingType.ADMINISTRATIVE,
             entrances = listOf(
-                CampusLocation("admin_entrance", 9.85282437919445, 122.89086729646579)
+                CampusLocation("admin_entrance", 9.853134834079396, 122.89070289397206)
             )
         ),
         Building(
@@ -388,7 +399,7 @@ object CampusDataProvider {
             location = CampusLocation("admin_old", 9.852863662387657, 122.89044785066042),
             type = BuildingType.ADMINISTRATIVE,
             entrances = listOf(
-                CampusLocation("admin_old_entrance", 9.852863662387657, 122.89044785066042)
+                CampusLocation("admin_old_entrance", 9.853134834079396, 122.89070289397206)
             )
         ),
         Building(
@@ -399,7 +410,7 @@ object CampusDataProvider {
             location = CampusLocation("registrar", 9.853254215951052, 122.88982102069603),
             type = BuildingType.ADMINISTRATIVE,
             entrances = listOf(
-                CampusLocation("registrar_entrance", 9.853254215951052, 122.88982102069603)
+                CampusLocation("registrar_entrance", 9.853456238693987, 122.89013391151813)
             )
         ),
         Building(
@@ -410,7 +421,7 @@ object CampusDataProvider {
             location = CampusLocation("ossa", 9.85407306458513, 122.8888194728647),
             type = BuildingType.ADMINISTRATIVE,
             entrances = listOf(
-                CampusLocation("ossa_entrance", 9.85407306458513, 122.8888194728647)
+                CampusLocation("ossa_entrance", 9.854375603699514, 122.88858627931438)
             )
         ),
         Building(
@@ -421,7 +432,7 @@ object CampusDataProvider {
             location = CampusLocation("mis", 9.853168, 122.889431),
             type = BuildingType.ADMINISTRATIVE,
             entrances = listOf(
-                CampusLocation("mis_entrance", 9.853168, 122.889431)
+                CampusLocation("mis_entrance", 9.852820903662368, 122.88976217632987)
             )
         ),
         Building(
@@ -432,7 +443,7 @@ object CampusDataProvider {
             location = CampusLocation("accred", 9.853522048029461, 122.89067910404592),
             type = BuildingType.ADMINISTRATIVE,
             entrances = listOf(
-                CampusLocation("accred_entrance", 9.853522048029461, 122.89067910404592)
+                CampusLocation("accred_entrance", 9.85361320364412, 122.89080151759343)
             )
         ),
         Building(
@@ -443,7 +454,7 @@ object CampusDataProvider {
             location = CampusLocation("kscd", 9.853403769975246, 122.88817695679008),
             type = BuildingType.ADMINISTRATIVE,
             entrances = listOf(
-                CampusLocation("kscd_entrance", 9.853403769975246, 122.88817695679008)
+                CampusLocation("kscd_entrance", 9.853424695042786, 122.88799352752392)
             )
         ),
         Building(
@@ -454,7 +465,7 @@ object CampusDataProvider {
             location = CampusLocation("yearbook", 9.850599914981576, 122.88940090408893),
             type = BuildingType.ADMINISTRATIVE,
             entrances = listOf(
-                CampusLocation("yearbook_entrance", 9.850599914981576, 122.88940090408893)
+                CampusLocation("yearbook_entrance", 9.849023816985406, 122.88810074757524)
             )
         ),
         Building(
@@ -465,7 +476,7 @@ object CampusDataProvider {
             location = CampusLocation("drrm", 9.853732087559674, 122.88833942271212),
             type = BuildingType.ADMINISTRATIVE,
             entrances = listOf(
-                CampusLocation("drrm_entrance", 9.853732087559674, 122.88833942271212)
+                CampusLocation("drrm_entrance", 9.853695423330025, 122.88819178482031)
             )
         ),
         Building(
@@ -476,7 +487,7 @@ object CampusDataProvider {
             location = CampusLocation("nstp", 9.853465991267354, 122.8882333432869),
             type = BuildingType.ADMINISTRATIVE,
             entrances = listOf(
-                CampusLocation("nstp_entrance", 9.853465991267354, 122.8882333432869)
+                CampusLocation("nstp_entrance", 9.853695423330025, 122.88819178482031)
             )
         ),
         Building(
@@ -487,7 +498,7 @@ object CampusDataProvider {
             location = CampusLocation("rotc", 9.853201550694834, 122.88836415995955),
             type = BuildingType.ADMINISTRATIVE,
             entrances = listOf(
-                CampusLocation("rotc_entrance", 9.853201550694834, 122.88836415995955)
+                CampusLocation("rotc_entrance", 9.853695423330025, 122.88819178482031)
             )
         ),
 
@@ -500,7 +511,7 @@ object CampusDataProvider {
             location = CampusLocation("gym", 9.853530434736115, 122.88780706137088),
             type = BuildingType.SPORTS,
             entrances = listOf(
-                CampusLocation("gym_entrance", 9.853530434736115, 122.88780706137088)
+                CampusLocation("gym_entrance", 9.853695423330025, 122.88819178482031)
             )
         ),
         Building(
@@ -511,7 +522,7 @@ object CampusDataProvider {
             location = CampusLocation("pool", 9.853471765633156, 122.89153553902976),
             type = BuildingType.SPORTS,
             entrances = listOf(
-                CampusLocation("pool_entrance", 9.853471765633156, 122.89153553902976)
+                CampusLocation("pool_entrance", 9.85361320364412, 122.89080151759343)
             )
         ),
 
@@ -524,7 +535,7 @@ object CampusDataProvider {
             location = CampusLocation("hub", 9.853590668411169, 122.88866477231646),
             type = BuildingType.LANDMARK,
             entrances = listOf(
-                CampusLocation("hub_entrance", 9.853590668411169, 122.88866477231646)
+                CampusLocation("hub_entrance", 9.853695423330025, 122.88819178482031)
             )
         ),
         Building(
@@ -535,7 +546,7 @@ object CampusDataProvider {
             location = CampusLocation("cafeteria", 9.853325632397336, 122.89097574633368),
             type = BuildingType.CAFETERIA,
             entrances = listOf(
-                CampusLocation("cafeteria_entrance", 9.853325632397336, 122.89097574633368)
+                CampusLocation("cafeteria_entrance", 9.853134834079396, 122.89070289397206)
             )
         ),
         Building(
@@ -546,7 +557,7 @@ object CampusDataProvider {
             location = CampusLocation("canteen", 9.85408737916657, 122.8890180392841),
             type = BuildingType.CAFETERIA,
             entrances = listOf(
-                CampusLocation("canteen_entrance", 9.85408737916657, 122.8890180392841)
+                CampusLocation("canteen_entrance", 9.854375603699514, 122.88858627931438)
             )
         ),
         Building(
@@ -557,7 +568,7 @@ object CampusDataProvider {
             location = CampusLocation("clinic", 9.851165444957411, 122.88894090526546),
             type = BuildingType.LANDMARK,
             entrances = listOf(
-                CampusLocation("clinic_entrance", 9.851165444957411, 122.88894090526546)
+                CampusLocation("clinic_entrance", 9.852820903662368, 122.88976217632987)
             )
         ),
         Building(
@@ -568,7 +579,7 @@ object CampusDataProvider {
             location = CampusLocation("safe", 9.85427576504456, 122.8886264958972),
             type = BuildingType.ADMINISTRATIVE,
             entrances = listOf(
-                CampusLocation("safe_entrance", 9.85427576504456, 122.8886264958972)
+                CampusLocation("safe_entrance", 9.854375603699514, 122.88858627931438)
             )
         ),
 
@@ -580,7 +591,7 @@ object CampusDataProvider {
             location = CampusLocation("hotel", 9.851318719269928, 122.88906428687646),
             type = BuildingType.LANDMARK,
             entrances = listOf(
-                CampusLocation("hotel_entrance", 9.851318719269928, 122.88906428687646)
+                CampusLocation("hotel_entrance", 9.852820903662368, 122.88976217632987)
             )
         ),
         Building(
@@ -591,7 +602,7 @@ object CampusDataProvider {
             location = CampusLocation("hall", 9.851894818646322, 122.89019081465135),
             type = BuildingType.ADMINISTRATIVE,
             entrances = listOf(
-                CampusLocation("hall_entrance", 9.851894818646322, 122.89019081465135)
+                CampusLocation("hall_entrance", 9.852492023851111, 122.89027805372855)
             )
         ),
         Building(
@@ -602,7 +613,7 @@ object CampusDataProvider {
             location = CampusLocation("nwb", 9.854503606500575, 122.88897576825885),
             type = BuildingType.ACADEMIC,
             entrances = listOf(
-                CampusLocation("nwb_entrance", 9.854503606500575, 122.88897576825885)
+                CampusLocation("nwb_entrance", 9.854375603699514, 122.88858627931438)
             )
         ),
         Building(
@@ -613,7 +624,7 @@ object CampusDataProvider {
             location = CampusLocation("museum", 9.853806457644907, 122.89035534929693),
             type = BuildingType.LANDMARK,
             entrances = listOf(
-                CampusLocation("museum_entrance", 9.853806457644907, 122.89035534929693)
+                CampusLocation("museum_entrance", 9.853456238693987, 122.89013391151813)
             )
         ),
         Building(
@@ -624,7 +635,7 @@ object CampusDataProvider {
             location = CampusLocation("rdec", 9.846988410971413, 122.88673311649),
             type = BuildingType.ADMINISTRATIVE,
             entrances = listOf(
-                CampusLocation("rdec_entrance", 9.846988410971413, 122.88673311649)
+                CampusLocation("rdec_entrance", 9.847079232227895, 122.88693058463876)
             )
         ),
         Building(
@@ -635,7 +646,7 @@ object CampusDataProvider {
             location = CampusLocation("pedo", 9.847510802295275, 122.8872694345796),
             type = BuildingType.ADMINISTRATIVE,
             entrances = listOf(
-                CampusLocation("pedo_entrance", 9.847510802295275, 122.8872694345796)
+                CampusLocation("pedo_entrance", 9.847738179314176, 122.88731934502138)
             )
         ),
         Building(
@@ -646,7 +657,7 @@ object CampusDataProvider {
             location = CampusLocation("alumni", 9.847958066385061, 122.88792594570222),
             type = BuildingType.ADMINISTRATIVE,
             entrances = listOf(
-                CampusLocation("alumni_entrance", 9.847958066385061, 122.88792594570222)
+                CampusLocation("alumni_entrance", 9.847738179314176, 122.88731934502138)
             )
         ),
         Building(
@@ -654,10 +665,10 @@ object CampusDataProvider {
             name = "Boarding House",
             shortName = "Boarding House",
             description = "Boarding House",
-            location = CampusLocation("alumni", 9.852121, 122.886243),
+            location = CampusLocation("bh", 9.852121, 122.886243),
             type = BuildingType.LANDMARK,
             entrances = listOf(
-                CampusLocation("alumni_entrance", 9.852121, 122.886243)
+                CampusLocation("alumni_entrance", 9.847738179314176, 122.88731934502138)
             )
         )
     )

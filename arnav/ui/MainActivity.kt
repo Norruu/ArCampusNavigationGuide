@@ -1,10 +1,15 @@
 package com.campus.arnav.ui
 
 import android.Manifest
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.view.View // <--- IMPORT ADDED
+import android.view.View
+import android.view.animation.AccelerateDecelerateInterpolator
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
@@ -22,7 +27,13 @@ import com.campus.arnav.domain.pathfinding.PathfindingEngine
 import com.google.android.material.snackbar.Snackbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import com.campus.arnav.service.NavigationService
 import com.campus.arnav.ui.map.MapFragment
 import javax.inject.Inject
 
@@ -35,6 +46,9 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var navController: NavController
+
+    // 1. Variable to hold the splash screen open
+    private var keepSplash = true
 
     companion object {
         private const val PREFS_NAME = "arnav_settings"
@@ -59,8 +73,36 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
+        // 2. Install the Splash Screen and capture the object
+        val splashScreen = installSplashScreen()
 
+        // 3. Keep it on screen for 1.5 seconds so users see the logo
+        splashScreen.setKeepOnScreenCondition { keepSplash }
+        lifecycleScope.launch {
+            delay(1500L)
+            keepSplash = false
+        }
+
+        // 4. The Premium Exit Animation (Fade out + Smooth Zoom)
+        splashScreen.setOnExitAnimationListener { splashScreenView ->
+            val alpha = ObjectAnimator.ofFloat(splashScreenView.view, View.ALPHA, 1f, 0f)
+            val scaleX = ObjectAnimator.ofFloat(splashScreenView.view, View.SCALE_X, 1f, 1.15f)
+            val scaleY = ObjectAnimator.ofFloat(splashScreenView.view, View.SCALE_Y, 1f, 1.15f)
+
+            AnimatorSet().apply {
+                playTogether(alpha, scaleX, scaleY)
+                duration = 500L // Half a second smooth transition
+                interpolator = AccelerateDecelerateInterpolator()
+                addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: Animator) {
+                        splashScreenView.remove() // Remove it once the animation finishes
+                    }
+                })
+                start()
+            }
+        }
+
+        // --- Original Setup Code Continues Below ---
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val isDark = prefs.getBoolean(KEY_DARK_MODE, false)
 
@@ -116,7 +158,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // --- FIX: Correct function name and use 'bottomNavigation' ---
     fun setBottomNavVisibility(visible: Boolean) {
         binding.bottomNavigation.visibility = if (visible) View.VISIBLE else View.GONE
     }
@@ -187,5 +228,32 @@ class MainActivity : AppCompatActivity() {
 
     override fun onSupportNavigateUp(): Boolean {
         return navController.navigateUp() || super.onSupportNavigateUp()
+    }
+    var isCurrentlyNavigating = false
+
+    override fun onResume() {
+        super.onResume()
+        // When user returns to app, hide the floating window!
+        val intent = Intent(this, NavigationService::class.java).apply {
+            action = NavigationService.ACTION_HIDE_OVERLAY
+        }
+        startService(intent)
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        // When user presses Home button, ask the service to pop the floating window!
+        if (isCurrentlyNavigating) {
+            if (Settings.canDrawOverlays(this)) {
+                val intent = Intent(this, NavigationService::class.java).apply {
+                    action = NavigationService.ACTION_SHOW_OVERLAY
+                }
+                startService(intent)
+            } else {
+                // Ask for permission the first time they try to float it
+                val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+                startActivity(intent)
+            }
+        }
     }
 }

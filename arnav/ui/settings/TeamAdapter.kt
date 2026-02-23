@@ -6,6 +6,7 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
 import com.campus.arnav.R
 import com.campus.arnav.data.model.TeamMember
 
@@ -30,7 +31,11 @@ class TeamAdapter(private val team: List<TeamMember>) :
         holder.name.text = member.name
         holder.role.text = member.role
         holder.desc.text = member.description
-        holder.image.setImageResource(member.imageResId)
+
+        Glide.with(holder.itemView.context)
+            .load(member.imageResId)
+            .override(200, 200)
+            .into(holder.image)
     }
 
     override fun getItemCount() = team.size

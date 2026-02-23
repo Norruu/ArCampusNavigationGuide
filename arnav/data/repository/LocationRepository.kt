@@ -5,17 +5,12 @@ import android.content.Context
 import android.location.Location
 import android.os.Looper
 import com.campus.arnav.data.model.CampusLocation
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationCallback
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationResult
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
+import com.google.android.gms.location.*
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.tasks.await    // <-- Add this import
+import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -26,54 +21,62 @@ class LocationRepository @Inject constructor(
     private val fusedLocationClient: FusedLocationProviderClient =
         LocationServices.getFusedLocationProviderClient(context)
 
-    /**
-     * Flow of location updates
-     */
+    // OPTIMIZED: 2s interval (was 500ms), 3m min distance — much easier on battery
+    // and avoids GPS jitter that causes crashes on low-end phones
     @SuppressLint("MissingPermission")
     val locationUpdates: Flow<CampusLocation> = callbackFlow {
         val locationRequest = LocationRequest.Builder(
-            Priority.PRIORITY_HIGH_ACCURACY,
-            1000L // Update interval in milliseconds
+            Priority.PRIORITY_BALANCED_POWER_ACCURACY, // CHANGED: was HIGH_ACCURACY
+            2000L  // CHANGED: was 1000ms
         ).apply {
-            setMinUpdateIntervalMillis(500L)
-            setMinUpdateDistanceMeters(1f)
+            setMinUpdateIntervalMillis(1500L)   // CHANGED: was 500ms
+            setMinUpdateDistanceMeters(3f)       // CHANGED: was 1m — reduces jitter
+            setMaxUpdateDelayMillis(5000L)       // NEW: batch updates on low-end devices
+            setWaitForAccurateLocation(false)    // NEW: don't stall startup on weak signal
         }.build()
 
         val locationCallback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
+                // Only emit if channel is still open — prevents crash on destroyed fragment
                 result.lastLocation?.let { location ->
                     trySend(location.toCampusLocation())
                 }
             }
+
+            override fun onLocationAvailability(availability: LocationAvailability) {
+                // GPS became unavailable — don't crash, just stop emitting
+                if (!availability.isLocationAvailable) {
+                    // Optionally notify UI, but don't throw
+                }
+            }
         }
 
-        fusedLocationClient.requestLocationUpdates(
-            locationRequest,
-            locationCallback,
-            Looper.getMainLooper()
-        )
+        try {
+            fusedLocationClient.requestLocationUpdates(
+                locationRequest,
+                locationCallback,
+                Looper.getMainLooper()
+            )
+        } catch (e: SecurityException) {
+            // Permission was revoked mid-session — close gracefully
+            close(e)
+        }
 
         awaitClose {
             fusedLocationClient.removeLocationUpdates(locationCallback)
         }
     }
 
-    /**
-     * Get last known location
-     */
     @SuppressLint("MissingPermission")
     suspend fun getLastLocation(): CampusLocation? {
         return try {
-            val location = fusedLocationClient.lastLocation.await()  // Uses imported await()
+            val location = fusedLocationClient.lastLocation.await()
             location?.toCampusLocation()
         } catch (e: Exception) {
             null
         }
     }
 
-    /**
-     * Convert Android Location to CampusLocation
-     */
     private fun Location.toCampusLocation(): CampusLocation {
         return CampusLocation(
             id = "user_location",

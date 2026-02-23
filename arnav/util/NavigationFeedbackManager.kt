@@ -1,6 +1,7 @@
 package com.campus.arnav.util
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -18,13 +19,16 @@ class NavigationFeedbackManager @Inject constructor(
 
     private var tts: TextToSpeech? = null
     private var isTtsReady = false
+    private var lastSpokenInstruction: String? = null  // FIXED: was "last spokenInstruction"
 
-    // --- FIX: Removed space in variable name ---
-    private var lastSpokenInstruction: String? = null
+    private val prefs: SharedPreferences =
+        context.getSharedPreferences("arnav_settings", Context.MODE_PRIVATE)
 
-    // Vibration Patterns
-    private val TURN_VIBRATION = longArrayOf(0, 100, 50, 100) // Double tick
-    private val ARRIVAL_VIBRATION = longArrayOf(0, 500, 200, 500) // Long buzz
+    private val TURN_VIBRATION    = longArrayOf(0, 100, 50, 100)
+    private val ARRIVAL_VIBRATION = longArrayOf(0, 500, 200, 500)
+
+    private val isVoiceEnabled   get() = prefs.getBoolean("voice_enabled",     true)
+    private val isVibrationEnabled get() = prefs.getBoolean("vibration_enabled", true)
 
     init {
         tts = TextToSpeech(context, this)
@@ -39,47 +43,42 @@ class NavigationFeedbackManager @Inject constructor(
     }
 
     fun speak(instruction: String) {
-        // 1. CHECK SETTINGS
-        val prefs = context.getSharedPreferences("arnav_settings", Context.MODE_PRIVATE)
-        val isVoiceEnabled = prefs.getBoolean("voice_enabled", true)
+        if (!isVoiceEnabled) return
+        if (!isTtsReady) return
+        if (instruction == lastSpokenInstruction) return  // don't repeat
 
-        // Only speak if Enabled AND Ready
-        if (isVoiceEnabled && isTtsReady && instruction != lastSpokenInstruction) {
-            lastSpokenInstruction = instruction
-            tts?.speak(instruction, TextToSpeech.QUEUE_FLUSH, null, null)
-        }
+        lastSpokenInstruction = instruction
+        tts?.speak(instruction, TextToSpeech.QUEUE_FLUSH, null, null)
     }
 
     fun vibrateForTurn() {
-        vibrate(TURN_VIBRATION)
+        if (isVibrationEnabled) vibrate(TURN_VIBRATION)
     }
 
     fun vibrateForArrival() {
-        vibrate(ARRIVAL_VIBRATION)
+        if (isVibrationEnabled) vibrate(ARRIVAL_VIBRATION)
     }
 
     private fun vibrate(pattern: LongArray) {
-        // 1. CHECK SETTINGS
-        val prefs = context.getSharedPreferences("arnav_settings", Context.MODE_PRIVATE)
-        val isVibrationEnabled = prefs.getBoolean("vibration_enabled", true)
-
-        // If vibration is disabled in settings, stop here.
-        if (!isVibrationEnabled) return
-
-        // 2. PERFORM VIBRATION (Version Safe)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-            val vibrator = vibratorManager.defaultVibrator
-            vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
-        } else {
-            @Suppress("DEPRECATION")
-            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-            vibrator.vibrate(pattern, -1)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val mgr = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                mgr.defaultVibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
+            } else {
+                @Suppress("DEPRECATION")
+                val v = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                @Suppress("DEPRECATION")
+                v.vibrate(pattern, -1)
+            }
+        } catch (e: Exception) {
+            // Some devices (emulators) throw here — swallow silently
         }
     }
 
     fun shutdown() {
         tts?.stop()
         tts?.shutdown()
+        tts = null
+        isTtsReady = false
     }
 }

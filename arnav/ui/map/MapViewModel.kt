@@ -3,7 +3,7 @@ package com.campus.arnav.ui.map
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.campus.arnav.data.model.Building
-import com.campus.arnav.data.model.NavigationStep
+import com.campus.arnav.data.model.Direction
 import com.campus.arnav.data.model.CampusLocation
 import com.campus.arnav.data.model.Route
 import com.campus.arnav.data.model.BuildingType
@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch  // ← THIS WAS THE MISSING IMPORT
 import kotlinx.coroutines.launch
 import org.osmdroid.util.GeoPoint
 import javax.inject.Inject
@@ -65,13 +66,14 @@ class MapViewModel @Inject constructor(
     private val _routePoints = MutableStateFlow<List<GeoPoint>?>(null)
     val routePoints: StateFlow<List<GeoPoint>?> = _routePoints.asStateFlow()
 
-    // --- NEW: Persistent View States ---
+    private val _destinationConnector = MutableStateFlow<Pair<GeoPoint, GeoPoint>?>(null)
+    val destinationConnector: StateFlow<Pair<GeoPoint, GeoPoint>?> = _destinationConnector.asStateFlow()
+
     private val _isSatelliteView = MutableStateFlow(false)
     val isSatelliteView: StateFlow<Boolean> = _isSatelliteView.asStateFlow()
 
     private val _isCompassMode = MutableStateFlow(false)
     val isCompassMode: StateFlow<Boolean> = _isCompassMode.asStateFlow()
-    // -----------------------------------
 
     private val _isPathfindingReady = MutableStateFlow(false)
     private val _useSmartPathfinding = MutableStateFlow(true)
@@ -84,6 +86,9 @@ class MapViewModel @Inject constructor(
 
     private var lastLocationUpdate: Long = 0
     private var lastLocation: CampusLocation? = null
+
+    private val SNAP_REDRAW_THRESHOLD_METRES = 3.0
+    private var lastSnapLocation: CampusLocation? = null
 
     // ============== INITIALIZATION ==============
 
@@ -121,21 +126,58 @@ class MapViewModel @Inject constructor(
     private fun startLocationUpdates() {
         locationJob?.cancel()
         locationJob = viewModelScope.launch {
-            locationRepository.locationUpdates.collect { location ->
-                _userLocation.value = location
-                val currentState = _navigationState.value
-                if (currentState is NavigationState.Navigating) {
-                    val currentTime = System.currentTimeMillis()
-                    val timeDiff = currentTime - lastLocationUpdate
-                    val dist = lastLocation?.let { calculateDistance(it, location) } ?: 100.0
-                    if (timeDiff > 2000 || dist > 3.0) {
-                        lastLocationUpdate = currentTime
-                        lastLocation = location
-                        updateNavigationProgress(location, currentState)
+            locationRepository.locationUpdates
+                .catch { e: Throwable ->  // ← explicit type fixes "Cannot infer type" error
+                    android.util.Log.e("MapViewModel", "Location error: ${e.message}")
+                }
+                .collect { location ->
+                    _userLocation.value = location
+
+                    val currentState = _navigationState.value
+                    if (currentState is NavigationState.Navigating) {
+                        val currentTime = System.currentTimeMillis()
+                        val timeDiff = currentTime - lastLocationUpdate
+                        val dist = lastLocation?.let { calculateDistance(it, location) } ?: 100.0
+
+                        if (timeDiff > 3000 || dist > 5.0) {
+                            lastLocationUpdate = currentTime
+                            lastLocation = location
+                            try {
+                                updateNavigationProgress(location, currentState)
+                            } catch (e: Exception) {
+                                android.util.Log.e("MapViewModel", "Nav progress error: ${e.message}")
+                            }
+                        }
+
+                        val snapDist = lastSnapLocation
+                            ?.let { calculateDistance(it, location) } ?: Double.MAX_VALUE
+                        if (snapDist >= SNAP_REDRAW_THRESHOLD_METRES) {
+                            lastSnapLocation = location
+                            trimRouteFromCurrentPosition(location)
+                        }
                     }
                 }
-            }
         }
+    }
+
+    private fun trimRouteFromCurrentPosition(location: CampusLocation) {
+        val points = _routePoints.value?.toMutableList() ?: return
+        if (points.size < 2) return
+
+        val userGeo = GeoPoint(location.latitude, location.longitude)
+
+        val nearestIdx = points.indices.minByOrNull { i ->
+            val p = points[i]
+            val dLat = p.latitude - userGeo.latitude
+            val dLon = p.longitude - userGeo.longitude
+            dLat * dLat + dLon * dLon
+        } ?: 0
+
+        val trimmed = buildList {
+            add(userGeo)
+            addAll(points.subList(nearestIdx.coerceAtLeast(1), points.size))
+        }
+        _routePoints.value = trimmed
     }
 
     // ============== ROUTING LOGIC ==============
@@ -144,7 +186,6 @@ class MapViewModel @Inject constructor(
         val currentState = _navigationState.value
 
         if (currentState is NavigationState.Navigating) return
-
         if (currentState is NavigationState.Previewing && currentState.destination.id == building.id) return
 
         _selectedBuilding.value = building
@@ -175,10 +216,9 @@ class MapViewModel @Inject constructor(
 
     private suspend fun calculateSmartRoute(currentLocation: CampusLocation, building: Building) {
         val start = GeoPoint(currentLocation.latitude, currentLocation.longitude)
-        val destination = building.entrances.minByOrNull { calculateDistance(currentLocation, it) } ?: building.location
-        val end = GeoPoint(destination.latitude, destination.longitude)
+        val target = GeoPoint(building.location.latitude, building.location.longitude)
 
-        when (val routeResult = campusPathfinding.findRoute(start, end)) {
+        when (val routeResult = campusPathfinding.findRoute(start, target, target)) {
             is RouteResult.Success -> handleRouteSuccess(routeResult.route, building)
             is RouteResult.NoRouteFound -> calculateSimpleRoute(currentLocation, building)
             is RouteResult.Error -> _uiEvent.emit(MapUiEvent.ShowError(routeResult.message))
@@ -193,68 +233,50 @@ class MapViewModel @Inject constructor(
         }
     }
 
-    // --- UPDATED: Use instruction generator here ---
     private fun handleRouteSuccess(route: Route, building: Building) {
-        // Calculate the "Turn Left/Right" instructions
         val improvedRoute = generateRouteInstructions(route)
-
         _activeRoute.value = improvedRoute
-        val points = improvedRoute.waypoints.map { GeoPoint(it.location.latitude, it.location.longitude) }
-        _routePoints.value = points
+
+        val allPoints = improvedRoute.waypoints.map {
+            GeoPoint(it.location.latitude, it.location.longitude)
+        }
+
+        _routePoints.value = allPoints
+        _destinationConnector.value = null
         _navigationState.value = NavigationState.Previewing(destination = building, route = improvedRoute)
     }
 
-    // --- NEW: Instruction Generator Functions ---
     private fun generateRouteInstructions(route: Route): Route {
-        if (route.waypoints.size < 3) return route
+        if (route.steps.size < 2) return route
 
         val newSteps = route.steps.toMutableList()
-        val waypoints = route.waypoints
 
-        for (i in 0 until min(newSteps.size, waypoints.size - 1)) {
-            if (i > 0 && i < waypoints.size - 1) {
-                val prev = waypoints[i-1]
-                val current = waypoints[i]
-                val next = waypoints[i+1]
-
-                val bearing1 = calculateBearing(prev.location, current.location)
-                val bearing2 = calculateBearing(current.location, next.location)
-
-                val instructionText = getTurnDescription(bearing1, bearing2)
-
-                // Update instruction
-                newSteps[i] = newSteps[i].copy(instruction = instructionText)
-            } else if (i == 0) {
-                newSteps[i] = newSteps[i].copy(instruction = "Start navigation")
+        for (i in newSteps.indices) {
+            val step = newSteps[i]
+            when {
+                i == 0 -> { }
+                i == newSteps.lastIndex -> {
+                    newSteps[i] = step.copy(instruction = "Arrive at destination")
+                }
+                else -> {
+                    newSteps[i] = step.copy(instruction = directionToInstruction(step.direction))
+                }
             }
         }
         return route.copy(steps = newSteps)
     }
 
-    private fun calculateBearing(start: CampusLocation, end: CampusLocation): Double {
-        val lat1 = Math.toRadians(start.latitude)
-        val lon1 = Math.toRadians(start.longitude)
-        val lat2 = Math.toRadians(end.latitude)
-        val lon2 = Math.toRadians(end.longitude)
-        val dLon = lon2 - lon1
-        val y = sin(dLon) * cos(lat2)
-        val x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
-        return Math.toDegrees(atan2(y, x))
+    private fun directionToInstruction(direction: Direction): String = when (direction) {
+        Direction.FORWARD      -> "Go straight"
+        Direction.SLIGHT_LEFT  -> "Slight left"
+        Direction.LEFT         -> "Turn left"
+        Direction.SHARP_LEFT   -> "Sharp left"
+        Direction.SLIGHT_RIGHT -> "Slight right"
+        Direction.RIGHT        -> "Turn right"
+        Direction.SHARP_RIGHT  -> "Sharp right"
+        Direction.U_TURN       -> "Make a U-turn"
+        Direction.ARRIVE       -> "Arrive at destination"
     }
-
-    private fun getTurnDescription(prevBearing: Double, currBearing: Double): String {
-        var diff = currBearing - prevBearing
-        while (diff < -180) diff += 360
-        while (diff > 180) diff -= 360
-        return when {
-            diff in -20.0..20.0 -> "Go Straight"
-            diff in -45.0..-20.0 -> "Slight Left"
-            diff < -45.0 -> "Turn Left"
-            diff in 20.0..45.0 -> "Slight Right"
-            else -> "Turn Right"
-        }
-    }
-    // ---------------------------------------------
 
     // ============== NAVIGATION CONTROL ==============
 
@@ -286,7 +308,14 @@ class MapViewModel @Inject constructor(
         _selectedBuilding.value = null
         _activeRoute.value = null
         _routePoints.value = null
+        _destinationConnector.value = null
         _navigationState.value = NavigationState.Idle
+
+        lastLocationUpdate = 0
+        lastLocation = null
+        lastSnapLocation = null
+        currentStepIndex = 0
+
         viewModelScope.launch { _uiEvent.emit(MapUiEvent.NavigationStopped) }
     }
 
@@ -321,7 +350,10 @@ class MapViewModel @Inject constructor(
             if (distToNext < 10.0) {
                 advanceToNextStep(state)
             } else {
-                _navigationState.value = state.copy(distanceToNextWaypoint = distToNext, remainingDistance = distanceToFinish)
+                _navigationState.value = state.copy(
+                    distanceToNextWaypoint = distToNext,
+                    remainingDistance = distanceToFinish
+                )
             }
         }
     }
@@ -349,7 +381,7 @@ class MapViewModel @Inject constructor(
         val building = _selectedBuilding.value
         if (building != null) {
             _navigationState.value = NavigationState.Arrived(building)
-            viewModelScope.launch { _uiEvent.emit(MapUiEvent.ShowArrivalDialog) }
+            viewModelScope.launch { _uiEvent.emit(MapUiEvent.ShowArrivalDialog(building.name)) }
         } else {
             _navigationState.value = NavigationState.Idle
         }
@@ -371,7 +403,6 @@ class MapViewModel @Inject constructor(
         }
 
         val currentState = _navigationState.value
-
         if (currentState !is NavigationState.Navigating && currentState !is NavigationState.Previewing) {
             _selectedBuilding.value = null
             _navigationState.value = NavigationState.Idle
@@ -404,9 +435,7 @@ class MapViewModel @Inject constructor(
 
     fun switchToARMode() {
         val route = _activeRoute.value ?: return
-
         val buildingName = _selectedBuilding.value?.name ?: "Destination"
-
         viewModelScope.launch {
             _uiEvent.emit(MapUiEvent.LaunchARNavigation(route, buildingName))
         }
@@ -420,7 +449,6 @@ class MapViewModel @Inject constructor(
         _isFollowingUser.value = following
     }
 
-    // --- NEW: State Setters ---
     fun setSatelliteView(enabled: Boolean) {
         _isSatelliteView.value = enabled
     }
@@ -428,10 +456,11 @@ class MapViewModel @Inject constructor(
     fun setCompassMode(enabled: Boolean) {
         _isCompassMode.value = enabled
     }
-    // --------------------------
 
     override fun onCleared() {
         super.onCleared()
+        locationJob?.cancel()
+        navigationJob?.cancel()
         feedbackManager.shutdown()
     }
 }
@@ -441,7 +470,7 @@ sealed class MapUiEvent {
     object NavigationStarted : MapUiEvent()
     object NavigationStopped : MapUiEvent()
     object OffRoute : MapUiEvent()
-    object ShowArrivalDialog : MapUiEvent()
+    data class ShowArrivalDialog(val buildingName: String) : MapUiEvent()
     data class WaypointReached(val index: Int) : MapUiEvent()
     data class LaunchARNavigation(val route: Route, val destinationName: String) : MapUiEvent()
     data class ShowError(val message: String) : MapUiEvent()

@@ -95,11 +95,13 @@ class HybridCampusPathfinding @Inject constructor(
     // --- STRATEGIES ---
 
     private suspend fun findPureCampusRoute(start: GeoPoint, end: GeoPoint, options: RouteOptions): RouteResult {
-        // Since we are inside the box, we find the nearest known nodes
+        // Since we are inside the box, we find the nearest known nodes.
+        // markerDestination defaults to end (no separate visual pin in hybrid mode).
         return pathfindingEngine.findRoute(
-            geoPointToCampusLocation(start, "start"),
-            geoPointToCampusLocation(end, "end"),
-            options
+            start = geoPointToCampusLocation(start, "start"),
+            end = geoPointToCampusLocation(end, "end"),
+            markerDestination = geoPointToCampusLocation(end, "end"),
+            options = options
         )
     }
 
@@ -132,7 +134,12 @@ class HybridCampusPathfinding @Inject constructor(
         val leg1 = findPureOSMRoute(start, gatewayGeo)
 
         // 3. Leg 2: Walk inside to the building (Internal Graph)
-        val leg2 = pathfindingEngine.findRoute(gatewayNode.location, geoPointToCampusLocation(end, "end"), options)
+        val leg2 = pathfindingEngine.findRoute(
+            start = gatewayNode.location,
+            end = geoPointToCampusLocation(end, "end"),
+            markerDestination = geoPointToCampusLocation(end, "end"),
+            options = options
+        )
 
         // 4. Stitch them together (With Fallback)
         val stitched = stitchRoutes(leg1, leg2)
@@ -154,7 +161,12 @@ class HybridCampusPathfinding @Inject constructor(
         val gatewayGeo = GeoPoint(gatewayNode.location.latitude, gatewayNode.location.longitude)
 
         // 2. Leg 1: Walk to the Gate (Internal Graph)
-        val leg1 = pathfindingEngine.findRoute(geoPointToCampusLocation(start, "start"), gatewayNode.location, options)
+        val leg1 = pathfindingEngine.findRoute(
+            start = geoPointToCampusLocation(start, "start"),
+            end = gatewayNode.location,
+            markerDestination = gatewayNode.location,
+            options = options
+        )
 
         // 3. Leg 2: Drive/Walk to destination (OSM)
         val leg2 = findPureOSMRoute(gatewayGeo, end)

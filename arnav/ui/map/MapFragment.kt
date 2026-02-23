@@ -3,6 +3,7 @@ package com.campus.arnav.ui.map
 import android.Manifest
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
@@ -15,7 +16,10 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
+import android.widget.Button
+import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
@@ -32,9 +36,16 @@ import com.campus.arnav.ui.MainActivity
 import com.campus.arnav.ui.ar.ARNavigationActivity
 import com.campus.arnav.ui.map.components.CampusPathsOverlay
 import com.campus.arnav.ui.map.components.CustomMarkerOverlay
+import com.campus.arnav.ui.map.components.DestinationConnectorOverlay
+import com.campus.arnav.ui.map.components.OffRoutePolyline
 import com.campus.arnav.ui.navigation.NavigationState
-import com.campus.arnav.util.CompassManager
+import com.campus.arnav.util.MapCompassManager
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
+import com.google.android.gms.location.Geofence
+import com.google.android.gms.location.GeofencingClient
+import com.google.android.gms.location.GeofencingRequest
+import com.google.android.gms.location.LocationServices
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -66,22 +77,38 @@ class MapFragment : Fragment() {
     private val buildingMarkers = mutableListOf<CustomMarkerOverlay>()
     private lateinit var campusPathsOverlay: CampusPathsOverlay
 
-    // Removed local variables, using ViewModel state instead
     private var isDarkMode = false
-
-    private lateinit var compassManager: CompassManager
+    private lateinit var mapCompassManager: MapCompassManager
 
     // Drag Variables
     private var startY = 0f
     private var startHeight = 0
     private var maxPanelHeight = 0
 
+    // Polyline overlays
+    private val offRoutePolyline = OffRoutePolyline()
+    private val destinationConnectorOverlay = DestinationConnectorOverlay()
+
+    // Geofencing Variables
+    private lateinit var geofencingClient: GeofencingClient
+    private val GEOFENCE_RADIUS_IN_METERS = 20f
+
     private val mainActivity get() = activity as? MainActivity
 
+    // Listens for the AR screen to close and checks if we need to cancel navigation
+    private val arNavigationLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val shouldCancel = result.data?.getBooleanExtra("CANCEL_NAVIGATION", false) == true
+            if (shouldCancel) {
+                viewModel.stopNavigation()
+            }
+        }
+    }
+
     override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
+        inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
     ): View {
         _binding = FragmentMapBinding.inflate(inflater, container, false)
         return binding.root
@@ -90,9 +117,12 @@ class MapFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        // MOVED HERE: Correct place to initialize the Geofencing Client
+        geofencingClient = LocationServices.getGeofencingClient(requireActivity())
+
         configureOSMDroid()
         campusPathsOverlay = CampusPathsOverlay()
-        compassManager = CompassManager(requireContext())
+        mapCompassManager = MapCompassManager(requireContext())
 
         setupMap()
         setupCampusMap(mapView)
@@ -100,6 +130,8 @@ class MapFragment : Fragment() {
         if (!mapView.overlays.contains(routePolyline)) {
             mapView.overlays.add(routePolyline)
         }
+        mapView.overlays.add(offRoutePolyline)
+        mapView.overlays.add(destinationConnectorOverlay)
 
         setupLocationOverlay()
         setupUI()
@@ -107,9 +139,7 @@ class MapFragment : Fragment() {
 
         setFragmentResultListener("search_request") { _, bundle ->
             val buildingId = bundle.getString("building_id")
-            if (buildingId != null) {
-                viewModel.selectBuildingById(buildingId)
-            }
+            if (buildingId != null) viewModel.selectBuildingById(buildingId)
         }
     }
 
@@ -184,7 +214,6 @@ class MapFragment : Fragment() {
             val container = binding.activeNavigationPanel.infoContainer
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    startY = event.rawY
                     if (maxPanelHeight == 0) {
                         val widthSpec = View.MeasureSpec.makeMeasureSpec(binding.activeNavigationPanel.root.width, View.MeasureSpec.EXACTLY)
                         val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
@@ -196,6 +225,7 @@ class MapFragment : Fragment() {
                         container.visibility = View.VISIBLE
                     }
                     startHeight = container.layoutParams.height
+                    startY = event.rawY
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -233,30 +263,53 @@ class MapFragment : Fragment() {
     }
 
     private fun observeViewModel() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.buildings.collectLatest { updateBuildingMarkers(it) }
-        }
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.activeRoute.collectLatest { route ->
-                if (route != null) displayRoute(route) else clearRoute()
-            }
-        }
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.navigationState.collectLatest { handleNavigationState(it) }
-        }
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.uiEvent.collectLatest { handleUiEvent(it) }
-        }
+        viewLifecycleOwner.lifecycleScope.launch { viewModel.buildings.collectLatest { updateBuildingMarkers(it) } }
+        viewLifecycleOwner.lifecycleScope.launch { viewModel.activeRoute.collectLatest { route -> if (route != null) displayRoute(route) else clearRoute() } }
+        viewLifecycleOwner.lifecycleScope.launch { viewModel.navigationState.collectLatest { handleNavigationState(it) } }
+        viewLifecycleOwner.lifecycleScope.launch { viewModel.uiEvent.collectLatest { handleUiEvent(it) } }
+        viewLifecycleOwner.lifecycleScope.launch { viewModel.isSatelliteView.collectLatest { isSat -> if (isSat) enableSatellite() else disableSatellite() } }
+        viewLifecycleOwner.lifecycleScope.launch { viewModel.isCompassMode.collectLatest { isCompass -> if (isCompass) startCompassMode() else stopCompassMode() } }
 
         viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.isSatelliteView.collectLatest { isSat ->
-                if (isSat) enableSatellite() else disableSatellite()
+            viewModel.userLocation.collectLatest { location ->
+                val routePts = viewModel.routePoints.value
+                val user = location?.let { GeoPoint(it.latitude, it.longitude) }
+                offRoutePolyline.update(user, routePts)
+                mapView.invalidate()
             }
         }
 
         viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.isCompassMode.collectLatest { isCompass ->
-                if (isCompass) startCompassMode() else stopCompassMode()
+            viewModel.routePoints.collectLatest { routePts ->
+                val location = viewModel.userLocation.value
+                val user = location?.let { GeoPoint(it.latitude, it.longitude) }
+                offRoutePolyline.update(user, routePts)
+                if (routePts != null) routePolyline.setPoints(routePts)
+                mapView.invalidate()
+            }
+        }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewModel.destinationConnector.collectLatest { connector ->
+                if (connector != null) destinationConnectorOverlay.set(connector.first, connector.second)
+                else destinationConnectorOverlay.clear()
+                mapView.invalidate()
+            }
+        }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewModel.isLoading.collectLatest { isLoading ->
+                if (isLoading) {
+                    binding.loadingOverlay.apply {
+                        alpha = 0f
+                        visibility = View.VISIBLE
+                        animate().alpha(1f).setDuration(200).start()
+                    }
+                } else {
+                    binding.loadingOverlay.animate().alpha(0f).setDuration(200).withEndAction {
+                        binding.loadingOverlay.visibility = View.GONE
+                    }.start()
+                }
             }
         }
     }
@@ -269,73 +322,99 @@ class MapFragment : Fragment() {
                 binding.activeNavigationPanel.root.visibility = View.GONE
                 binding.categoryContainer.visibility = View.VISIBLE
                 binding.fabArMode.visibility = View.GONE
-
                 mainActivity?.setBottomNavVisibility(true)
-
                 clearRoute()
+                mainActivity?.isCurrentlyNavigating = false
+                if (state !is NavigationState.Previewing) {
+                    sendCommandToService(com.campus.arnav.service.NavigationService.ACTION_STOP)
+                }
             }
-
             is NavigationState.Previewing -> {
                 binding.navigationPanel.root.visibility = View.VISIBLE
                 binding.activeNavigationPanel.root.visibility = View.GONE
                 binding.categoryContainer.visibility = View.VISIBLE
                 binding.fabArMode.visibility = View.GONE
-
                 mainActivity?.setBottomNavVisibility(true)
+                mainActivity?.isCurrentlyNavigating = false
 
                 binding.navigationPanel.tvDestinationName.text = state.destination.name
                 binding.navigationPanel.tvDestinationDescription.text = state.destination.description ?: ""
                 binding.navigationPanel.ivDestinationIcon.setImageResource(getIconForBuildingType(state.destination.type))
 
-                state.route?.let { route ->
-                    updateRouteInfo(route)
-                } ?: run {
+                state.route?.let { route -> updateRouteInfo(route) } ?: run {
                     binding.navigationPanel.tvDistance.text = "..."
                     binding.navigationPanel.tvEta.text = "..."
                 }
                 clearRoute()
             }
-
             is NavigationState.Navigating -> {
                 binding.navigationPanel.root.visibility = View.GONE
                 binding.activeNavigationPanel.root.visibility = View.VISIBLE
                 binding.categoryContainer.visibility = View.GONE
                 binding.fabArMode.visibility = View.VISIBLE
-
                 mainActivity?.setBottomNavVisibility(false)
-
                 binding.activeNavigationPanel.infoContainer.visibility = View.VISIBLE
                 displayRoute(state.route)
                 updateActiveNavigation(state)
-            }
+                mainActivity?.isCurrentlyNavigating = true
 
+                val intent = Intent(requireContext(), com.campus.arnav.service.NavigationService::class.java).apply {
+                    action = com.campus.arnav.service.NavigationService.ACTION_UPDATE
+                    putExtra(com.campus.arnav.service.NavigationService.EXTRA_INSTRUCTION, state.currentStep.instruction)
+                    putExtra(com.campus.arnav.service.NavigationService.EXTRA_DISTANCE, "in ${formatDistance(state.distanceToNextWaypoint)}")
+                }
+                ContextCompat.startForegroundService(requireContext(), intent)
+            }
             is NavigationState.Arrived -> {
                 binding.navigationPanel.root.visibility = View.GONE
                 binding.activeNavigationPanel.root.visibility = View.GONE
                 binding.categoryContainer.visibility = View.GONE
                 binding.fabArMode.visibility = View.GONE
-
                 mainActivity?.setBottomNavVisibility(true)
-
-                Snackbar.make(binding.root, "You have arrived!", Snackbar.LENGTH_LONG).show()
                 clearRoute()
+                mainActivity?.isCurrentlyNavigating = false
+                sendCommandToService(com.campus.arnav.service.NavigationService.ACTION_STOP)
             }
+        }
+    }
+
+    private fun sendCommandToService(actionStr: String) {
+        val intent = Intent(requireContext(), com.campus.arnav.service.NavigationService::class.java)
+
+        if (actionStr == com.campus.arnav.service.NavigationService.ACTION_STOP) {
+            requireContext().stopService(intent)
+        } else {
+            intent.action = actionStr
+            ContextCompat.startForegroundService(requireContext(), intent)
         }
     }
 
     private fun handleUiEvent(event: MapUiEvent) {
         when (event) {
             is MapUiEvent.LaunchARNavigation -> {
-                val intent = Intent(requireContext(), ARNavigationActivity::class.java)
+                val intent = Intent(requireContext(), ARNavigationActivity::class.java).apply {
+                    val dest = event.route.waypoints.last().location
 
-                // Get the final destination coordinates from the route
-                val dest = event.route.waypoints.last().location
+                    putExtra("TARGET_LAT", dest.latitude)
+                    putExtra("TARGET_LON", dest.longitude)
+                    putExtra("TARGET_NAME", event.destinationName)
 
-                intent.putExtra("TARGET_LAT", dest.latitude)
-                intent.putExtra("TARGET_LON", dest.longitude)
-                intent.putExtra("TARGET_NAME", event.destinationName)
+                    val points = viewModel.routePoints.value ?: event.route.waypoints.map {
+                        GeoPoint(it.location.latitude, it.location.longitude)
+                    }
+                    val lats = points.map { it.latitude }.toDoubleArray()
+                    val lons = points.map { it.longitude }.toDoubleArray()
 
-                startActivity(intent)
+                    putExtra("ROUTE_LATS", lats)
+                    putExtra("ROUTE_LONS", lons)
+                    putExtra("MAP_TYPE", binding.mapView.tileProvider.tileSource.name())
+                }
+
+                // Set up the Geofence for the destination!
+                val destNode = event.route.waypoints.last().location
+                addDestinationGeofence(destNode.latitude, destNode.longitude, event.destinationName)
+
+                arNavigationLauncher.launch(intent)
             }
             is MapUiEvent.MoveCameraTo -> {
                 mapView.controller.animateTo(event.location, 18.5, 1500L)
@@ -349,12 +428,61 @@ class MapFragment : Fragment() {
             }
             is MapUiEvent.ShowError -> Snackbar.make(binding.root, event.message, Snackbar.LENGTH_LONG).show()
             is MapUiEvent.OffRoute -> Snackbar.make(binding.root, "You are off route", Snackbar.LENGTH_SHORT).show()
-            is MapUiEvent.ShowArrivalDialog -> {
-                Snackbar.make(binding.root, "You have arrived!", Snackbar.LENGTH_LONG).show()
-                viewModel.stopNavigation()
-            }
+            is MapUiEvent.ShowArrivalDialog -> showArrivalDialog(event.buildingName)
             else -> {}
         }
+    }
+
+    // --- GEOFENCING LOGIC ---
+    @SuppressLint("MissingPermission")
+    private fun addDestinationGeofence(targetLat: Double, targetLon: Double, targetName: String) {
+        if (!hasLocationPermission()) return
+
+        val geofence = Geofence.Builder()
+            .setRequestId(targetName)
+            .setCircularRegion(targetLat, targetLon, GEOFENCE_RADIUS_IN_METERS)
+            .setExpirationDuration(Geofence.NEVER_EXPIRE)
+            .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER or Geofence.GEOFENCE_TRANSITION_EXIT)
+            .build()
+
+        val geofencingRequest = GeofencingRequest.Builder()
+            .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
+            .addGeofence(geofence)
+            .build()
+
+        val intent = Intent(requireContext(), com.campus.arnav.receiver.GeofenceBroadcastReceiver::class.java)
+        val pendingIntent = android.app.PendingIntent.getBroadcast(
+            requireContext(),
+            0,
+            intent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_MUTABLE
+        )
+
+        geofencingClient.addGeofences(geofencingRequest, pendingIntent)?.run {
+            addOnSuccessListener {
+                android.util.Log.d("GEOFENCE", "Successfully added geofence for $targetName!")
+            }
+            addOnFailureListener {
+                android.util.Log.e("GEOFENCE", "Failed to add geofence: ${it.message}")
+            }
+        }
+    }
+
+    private fun showArrivalDialog(buildingName: String) {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_arrival, null)
+        val dialog = MaterialAlertDialogBuilder(requireContext())
+            .setView(dialogView)
+            .setCancelable(false)
+            .create()
+
+        dialogView.findViewById<TextView>(R.id.tvArrivalMessage).text = "You have successfully reached $buildingName."
+        dialogView.findViewById<Button>(R.id.btnFinishNavigation).setOnClickListener {
+            dialog.dismiss()
+            viewModel.stopNavigation()
+        }
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.show()
     }
 
     private fun configureOSMDroid() {
@@ -375,9 +503,7 @@ class MapFragment : Fragment() {
             minZoomLevel = 14.0
             maxZoomLevel = 20.0
             isTilesScaledToDpi = true
-
             setLayerType(View.LAYER_TYPE_SOFTWARE, null)
-
             if (isDarkMode) applyDarkModeFilter()
         }
 
@@ -431,23 +557,25 @@ class MapFragment : Fragment() {
     }
 
     private fun displayRoute(route: Route) {
-        val points = route.waypoints.map { GeoPoint(it.location.latitude, it.location.longitude) }
-        routePolyline.setPoints(points)
+        val allPoints = viewModel.routePoints.value ?: route.waypoints.map { GeoPoint(it.location.latitude, it.location.longitude) }
+        routePolyline.setPoints(allPoints)
+        mapView.invalidate()
     }
 
     private fun clearRoute() {
         routePolyline.setPoints(emptyList())
+        offRoutePolyline.clear()
+        destinationConnectorOverlay.clear()
+        mapView.invalidate()
     }
 
     private fun updateActiveNavigation(state: NavigationState.Navigating) {
-        binding.activeNavigationPanel.tvCurrentInstruction.text = state.currentStep.instruction
+        val step = state.currentStep
+        binding.activeNavigationPanel.tvCurrentInstruction.text = step.instruction
         binding.activeNavigationPanel.tvDistanceToNext.text = "in ${formatDistance(state.distanceToNextWaypoint)}"
         binding.activeNavigationPanel.tvRemainingDistance.text = formatDistance(state.remainingDistance)
         binding.activeNavigationPanel.tvRemainingTime.text = formatTime(state.remainingTime)
-        binding.activeNavigationPanel.progressRoute.progress = if (state.route.totalDistance > 0) {
-            ((state.route.totalDistance - state.remainingDistance) / state.route.totalDistance * 100).toInt()
-        } else 0
-        binding.activeNavigationPanel.ivDirectionIcon.setImageResource(getDirectionIcon(state.currentStep.direction))
+        binding.activeNavigationPanel.ivDirectionIcon.setImageResource(getDirectionIcon(step.direction))
     }
 
     private fun updateBuildingMarkers(buildings: List<Building>) {
@@ -499,59 +627,40 @@ class MapFragment : Fragment() {
         }
     }
 
-    private fun hasLocationPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-    }
+    private fun hasLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
-    fun toggleMapLayer() {
-        val current = viewModel.isSatelliteView.value
-        viewModel.setSatelliteView(!current)
-    }
+    fun toggleMapLayer() { viewModel.setSatelliteView(!(viewModel.isSatelliteView.value)) }
 
-    private fun toggleCompassMode() {
-        val current = viewModel.isCompassMode.value
-        viewModel.setCompassMode(!current)
-    }
+    private fun toggleCompassMode() { viewModel.setCompassMode(!(viewModel.isCompassMode.value)) }
 
-    // --- HELPER FUNCTIONS FOR STATES ---
     private fun enableSatellite() {
         try {
             mapView.overlayManager.tilesOverlay.setColorFilter(null)
             val googleSatellite = object : OnlineTileSourceBase(
-                "Google-Satellite", 0, 20, 256, ".png",
-                arrayOf("https://mt0.google.com/vt/lyrs=s&hl=en&x=")
+                "Google-Satellite", 0, 20, 256, ".png", arrayOf("https://mt0.google.com/vt/lyrs=s&hl=en&x=")
             ) {
                 override fun getTileURLString(pMapTileIndex: Long): String =
                     "${baseUrl}${MapTileIndex.getX(pMapTileIndex)}&y=${MapTileIndex.getY(pMapTileIndex)}&z=${MapTileIndex.getZoom(pMapTileIndex)}"
             }
             mapView.setTileSource(googleSatellite)
-
-            // 1. Add paths (covers everything)
             campusPathsOverlay.addPathsToMap(mapView)
 
-            // 2. FORCE RE-ORDER: Move important things to the top
-
-            // Move Route to front
+            // Reorder overlays
             mapView.overlays.remove(routePolyline)
             mapView.overlays.add(routePolyline)
-
-            // Move Location to front
-            myLocationOverlay?.let {
-                mapView.overlays.remove(it)
-                mapView.overlays.add(it)
-            }
-
-            // Move Markers to front
-            buildingMarkers.forEach { marker ->
-                mapView.overlays.remove(marker)
-                mapView.overlays.add(marker)
-            }
+            myLocationOverlay?.let { mapView.overlays.remove(it); mapView.overlays.add(it) }
+            buildingMarkers.forEach { marker -> mapView.overlays.remove(marker); mapView.overlays.add(marker) }
 
             Toast.makeText(requireContext(), "Satellite View", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             viewModel.setSatelliteView(false)
         }
         mapView.invalidate()
+        mapView.overlays.remove(offRoutePolyline)
+        mapView.overlays.add(offRoutePolyline)
+        mapView.overlays.remove(destinationConnectorOverlay)
+        mapView.overlays.add(destinationConnectorOverlay)
     }
 
     private fun disableSatellite() {
@@ -564,15 +673,14 @@ class MapFragment : Fragment() {
         binding.fabCompass.imageTintList = ColorStateList.valueOf(ContextCompat.getColor(requireContext(), R.color.map_blue))
         binding.fabCompass.setImageResource(R.drawable.ic_compass)
         Toast.makeText(requireContext(), "Compass Mode: On", Toast.LENGTH_SHORT).show()
-        compassManager.start { mapOrientation, isFlat ->
-            if (isFlat) mapView.mapOrientation = mapOrientation
-        }
+
+        mapCompassManager.start { mapRotation -> mapView.mapOrientation = mapRotation }
         viewModel.setFollowingUser(true)
         myLocationOverlay?.enableFollowLocation()
     }
 
     private fun stopCompassMode() {
-        compassManager.stop()
+        mapCompassManager.stop()
         binding.fabCompass.imageTintList = ColorStateList.valueOf(
             com.google.android.material.color.MaterialColors.getColor(binding.fabCompass, com.google.android.material.R.attr.colorOnSurface)
         )
@@ -596,7 +704,7 @@ class MapFragment : Fragment() {
         super.onPause()
         mapView.onPause()
         myLocationOverlay?.disableMyLocation()
-        compassManager.stop()
+        mapCompassManager.stop()
     }
 
     override fun onDestroyView() {
