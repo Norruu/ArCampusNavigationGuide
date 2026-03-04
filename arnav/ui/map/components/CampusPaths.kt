@@ -23,7 +23,6 @@ object CampusPaths {
     private val nodeMainGate            = GeoPoint(9.847738179314176,  122.88731934502138)
     private val nodeRDEC                = GeoPoint(9.847079232227895,  122.88693058463876)
     private val nodeHallwayJunction     = GeoPoint(9.849023816985406,  122.88810074757524)
-    private val nodeHallwayCoeJunction     = GeoPoint(9.849096366112185, 122.88791038088114)
     private val nodeHallwayToAdmin      = GeoPoint(9.852492023851111,  122.89027805372855)
     private val nodeAdminJunction       = GeoPoint(9.852820903662368,  122.88976217632987)
     private val nodeJunctionMuseum      = GeoPoint(9.853456238693987,  122.89013391151813)
@@ -82,12 +81,6 @@ object CampusPaths {
             points = listOf(nodeBackOssaJunction, nodeJunctionMuseum),
             type = PathType.MAIN_ROAD
         ),
-
-        // This gives the pathfinding engine a direct route from the bottom of the map!
-        Path("coe-to-caf", "COE to CAF", listOf(
-            nodeHallwayCoeJunction,
-            GeoPoint(9.852623906075847, 122.89006538291648),
-        ), PathType.WALKWAY),
 
         // 2. Main Gate → RDEC  (side road from gate going west)
         Path(
@@ -213,14 +206,7 @@ object CampusPaths {
         Path(
             id   = "coe-to-hallway",
             name = "COEJunction-to-HallwayJunction",
-            points = listOf(nodeCOEJunction, nodeHallwayCoeJunction),
-            type = PathType.MAIN_ROAD
-        ),
-
-        Path(
-            id   = "coe-junction-hallway",
-            name = "COEJunction-to-HallwayJunction",
-            points = listOf(nodeHallwayCoeJunction, nodeHallwayJunction),
+            points = listOf(nodeCOEJunction, nodeHallwayJunction),
             type = PathType.MAIN_ROAD
         ),
 

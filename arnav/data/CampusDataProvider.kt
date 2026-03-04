@@ -71,7 +71,7 @@ object CampusDataProvider {
                 location = CampusLocation("caf", 9.850113664121954, 122.88818988673896),
                 type = BuildingType.ACADEMIC,
                 entrances = listOf(
-                    CampusLocation("caf_entrance", 9.849921812153115, 122.88854051709363)
+                    CampusLocation("caf_entrance", 9.849023816985406, 122.88810074757524)
                 )
             ))
             .addBuilding(Building(
@@ -200,7 +200,7 @@ object CampusDataProvider {
             // --- CONNECTIONS ---
             // Connect main pathways
             .connectPath("main_gate", "path_south")
-            .connectPath("house_gate", "path_south")
+            .connectPath("house_gate", "path_south")// Connect the Gate to the internal road
             .connectPath("path_south", "path_center")
             .connectPath("path_center", "path_north")
             .connectPath("path_center", "path_east")
@@ -241,7 +241,7 @@ object CampusDataProvider {
             location = CampusLocation("caf", 9.850113664121954, 122.88818988673896),
             type = BuildingType.ACADEMIC,
             entrances = listOf(
-                CampusLocation("caf_entrance", 9.849921812153115, 122.88854051709363)
+                CampusLocation("caf_entrance", 9.849023816985406, 122.88810074757524)
             )
         ),
         Building(
@@ -253,17 +253,6 @@ object CampusDataProvider {
             type = BuildingType.ACADEMIC,
             entrances = listOf(
                 CampusLocation("crim_entrance", 9.849023816985406, 122.88810074757524)
-            )
-        ),
-        Building(
-            id = "tyngge",
-            name = "tyngge",
-            shortName = "tyngge",
-            description = "Sari-Sari",
-            location = CampusLocation("crim", 9.852216110920974, 122.88619915401392),
-            type = BuildingType.LANDMARK,
-            entrances = listOf(
-                CampusLocation("crim_entrance", 9.852237323884994, 122.88614891620882)
             )
         ),
         Building(

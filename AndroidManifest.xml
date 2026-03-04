@@ -2,27 +2,32 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Permissions -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.INTERNET" />
+
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- Camera feature -->
     <uses-feature
         android:name="android.hardware.camera"
-        android:required="true" />
+        android:required="false" />
     <uses-feature
         android:name="android.hardware.camera.autofocus"
         android:required="false" />
 
-    <!-- AR feature -->
     <uses-feature
         android:name="android.hardware.camera.ar"
-        android:required="true" />
+        android:required="false" />
 
-    <!-- Location feature -->
     <uses-feature
         android:name="android.hardware.location.gps"
         android:required="false" />
@@ -37,26 +42,26 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.CampusARNav"
+        android:requestLegacyExternalStorage="true"
+        android:usesCleartextTraffic="true"
+        android:hardwareAccelerated="true"
         tools:targetApi="31">
 
-        <!-- ARCore metadata -->
         <meta-data
             android:name="com.google.ar.core"
-            android:value="required" />
+            android:value="optional" />
 
-        <!-- Main Activity -->
         <activity
-            android:name=".MainActivity"
+            android:name=".ui.MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.CampusARNav.Splash"
-            android:windowSoftInputMode="adjustResize">
+            android:theme="@style/Theme.App.Starting"
+            android:windowSoftInputMode="adjustPan|stateHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- AR Navigation Activity -->
         <activity
             android:name=".ui.ar.ARNavigationActivity"
             android:exported="false"

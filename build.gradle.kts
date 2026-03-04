@@ -53,6 +53,9 @@ configurations.all {
 }
 
 dependencies {
+    //Splashscreen
+    implementation("androidx.core:core-splashscreen:1.0.1")
+
     // Core AndroidX
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
@@ -68,9 +71,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
     implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
-
-    // ZXing for QR code scanning
-    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 
     // Hilt
     implementation("com.google.dagger:hilt-android:2.50")
@@ -93,7 +93,13 @@ dependencies {
     implementation("com.google.android.gms:play-services-location:21.0.1")
 
     // Maps (OSMDroid)
-    implementation("org.osmdroid:osmdroid-android:6.1.17")
+    implementation("org.osmdroid:osmdroid-android:6.1.18")
+
+    // OSMDroid Bonus Pack for routing and additional features
+    implementation("com.github.MKergall:osmbonuspack:6.9.0")
+
+    // Library required for OSMDroid configuration and tile caching
+    implementation("androidx.preference:preference-ktx:1.2.1")
 
     // ARCore
     implementation("com.google.ar:core:1.41.0")
@@ -104,12 +110,20 @@ dependencies {
     ksp("androidx.room:room-compiler:2.6.1")
 
     // CameraX
-    implementation("androidx.camera:camera-camera2:1.3.1")
-    implementation("androidx.camera:camera-lifecycle:1.3.1")
-    implementation("androidx.camera:camera-view:1.3.1")
+    val camerax_version = "1.3.1"
+    implementation("androidx.camera:camera-core:${camerax_version}")
+    implementation("androidx.camera:camera-camera2:${camerax_version}")
+    implementation("androidx.camera:camera-lifecycle:${camerax_version}")
+    implementation("androidx.camera:camera-view:${camerax_version}")
 
     // ML Kit Barcode
     implementation("com.google.mlkit:barcode-scanning:17.2.0")
+
+    // Add the AR version
+    implementation("io.github.sceneview:arsceneview:2.0.3")
+
+    // Glide for image loading
+    implementation("com.github.bumptech.glide:glide:4.16.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

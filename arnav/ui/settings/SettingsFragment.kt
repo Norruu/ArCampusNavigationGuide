@@ -70,7 +70,7 @@ class SettingsFragment : Fragment() {
             TeamMember(
                 "Ryan Jay B. Madayag",
                 "Project Lead",
-                "Head Programmer & Developer of Thesis App.",
+                "Full-stack developer specializing in AR and maps.",
                 R.drawable.ryan
             ),
             TeamMember(
@@ -88,13 +88,13 @@ class SettingsFragment : Fragment() {
             TeamMember(
                 "Anika Tabian",
                 "UI/UX Designer",
-                "Designed and helped with the user interface and experience.",
+                "Designed the user interface and experience.",
                 R.drawable.anika
             ),
             TeamMember(
                 "Roan Ayalin",
-                "Head UI/UX Designer",
-                "Head Designer for user interface and experience.",
+                "UI/UX Designer",
+                "Designed the user interface and experience.",
                 R.drawable.roan
             )
         )

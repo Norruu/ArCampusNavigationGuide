@@ -29,11 +29,6 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import android.content.Intent
-import android.net.Uri
-import android.os.Build
-import android.provider.Settings
-import com.campus.arnav.service.NavigationService
 import com.campus.arnav.ui.map.MapFragment
 import javax.inject.Inject
 
@@ -228,32 +223,5 @@ class MainActivity : AppCompatActivity() {
 
     override fun onSupportNavigateUp(): Boolean {
         return navController.navigateUp() || super.onSupportNavigateUp()
-    }
-    var isCurrentlyNavigating = false
-
-    override fun onResume() {
-        super.onResume()
-        // When user returns to app, hide the floating window!
-        val intent = Intent(this, NavigationService::class.java).apply {
-            action = NavigationService.ACTION_HIDE_OVERLAY
-        }
-        startService(intent)
-    }
-
-    override fun onUserLeaveHint() {
-        super.onUserLeaveHint()
-        // When user presses Home button, ask the service to pop the floating window!
-        if (isCurrentlyNavigating) {
-            if (Settings.canDrawOverlays(this)) {
-                val intent = Intent(this, NavigationService::class.java).apply {
-                    action = NavigationService.ACTION_SHOW_OVERLAY
-                }
-                startService(intent)
-            } else {
-                // Ask for permission the first time they try to float it
-                val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
-                startActivity(intent)
-            }
-        }
     }
 }

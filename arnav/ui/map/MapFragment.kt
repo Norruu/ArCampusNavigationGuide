@@ -42,10 +42,6 @@ import com.campus.arnav.ui.navigation.NavigationState
 import com.campus.arnav.util.MapCompassManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
-import com.google.android.gms.location.Geofence
-import com.google.android.gms.location.GeofencingClient
-import com.google.android.gms.location.GeofencingRequest
-import com.google.android.gms.location.LocationServices
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -89,13 +85,9 @@ class MapFragment : Fragment() {
     private val offRoutePolyline = OffRoutePolyline()
     private val destinationConnectorOverlay = DestinationConnectorOverlay()
 
-    // Geofencing Variables
-    private lateinit var geofencingClient: GeofencingClient
-    private val GEOFENCE_RADIUS_IN_METERS = 20f
-
     private val mainActivity get() = activity as? MainActivity
 
-    // Listens for the AR screen to close and checks if we need to cancel navigation
+    // NEW: Listens for the AR screen to close and checks if we need to cancel navigation
     private val arNavigationLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -116,9 +108,6 @@ class MapFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-
-        // MOVED HERE: Correct place to initialize the Geofencing Client
-        geofencingClient = LocationServices.getGeofencingClient(requireActivity())
 
         configureOSMDroid()
         campusPathsOverlay = CampusPathsOverlay()
@@ -225,7 +214,10 @@ class MapFragment : Fragment() {
                         container.visibility = View.VISIBLE
                     }
                     startHeight = container.layoutParams.height
+
+                    // FIXED: This line makes the drag math work correctly
                     startY = event.rawY
+
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -324,10 +316,6 @@ class MapFragment : Fragment() {
                 binding.fabArMode.visibility = View.GONE
                 mainActivity?.setBottomNavVisibility(true)
                 clearRoute()
-                mainActivity?.isCurrentlyNavigating = false
-                if (state !is NavigationState.Previewing) {
-                    sendCommandToService(com.campus.arnav.service.NavigationService.ACTION_STOP)
-                }
             }
             is NavigationState.Previewing -> {
                 binding.navigationPanel.root.visibility = View.VISIBLE
@@ -335,7 +323,6 @@ class MapFragment : Fragment() {
                 binding.categoryContainer.visibility = View.VISIBLE
                 binding.fabArMode.visibility = View.GONE
                 mainActivity?.setBottomNavVisibility(true)
-                mainActivity?.isCurrentlyNavigating = false
 
                 binding.navigationPanel.tvDestinationName.text = state.destination.name
                 binding.navigationPanel.tvDestinationDescription.text = state.destination.description ?: ""
@@ -353,17 +340,10 @@ class MapFragment : Fragment() {
                 binding.categoryContainer.visibility = View.GONE
                 binding.fabArMode.visibility = View.VISIBLE
                 mainActivity?.setBottomNavVisibility(false)
+
                 binding.activeNavigationPanel.infoContainer.visibility = View.VISIBLE
                 displayRoute(state.route)
                 updateActiveNavigation(state)
-                mainActivity?.isCurrentlyNavigating = true
-
-                val intent = Intent(requireContext(), com.campus.arnav.service.NavigationService::class.java).apply {
-                    action = com.campus.arnav.service.NavigationService.ACTION_UPDATE
-                    putExtra(com.campus.arnav.service.NavigationService.EXTRA_INSTRUCTION, state.currentStep.instruction)
-                    putExtra(com.campus.arnav.service.NavigationService.EXTRA_DISTANCE, "in ${formatDistance(state.distanceToNextWaypoint)}")
-                }
-                ContextCompat.startForegroundService(requireContext(), intent)
             }
             is NavigationState.Arrived -> {
                 binding.navigationPanel.root.visibility = View.GONE
@@ -372,48 +352,27 @@ class MapFragment : Fragment() {
                 binding.fabArMode.visibility = View.GONE
                 mainActivity?.setBottomNavVisibility(true)
                 clearRoute()
-                mainActivity?.isCurrentlyNavigating = false
-                sendCommandToService(com.campus.arnav.service.NavigationService.ACTION_STOP)
             }
-        }
-    }
-
-    private fun sendCommandToService(actionStr: String) {
-        val intent = Intent(requireContext(), com.campus.arnav.service.NavigationService::class.java)
-
-        if (actionStr == com.campus.arnav.service.NavigationService.ACTION_STOP) {
-            requireContext().stopService(intent)
-        } else {
-            intent.action = actionStr
-            ContextCompat.startForegroundService(requireContext(), intent)
         }
     }
 
     private fun handleUiEvent(event: MapUiEvent) {
         when (event) {
             is MapUiEvent.LaunchARNavigation -> {
-                val intent = Intent(requireContext(), ARNavigationActivity::class.java).apply {
-                    val dest = event.route.waypoints.last().location
+                val intent = Intent(requireContext(), ARNavigationActivity::class.java)
+                val dest = event.route.waypoints.last().location
+                intent.putExtra("TARGET_LAT", dest.latitude)
+                intent.putExtra("TARGET_LON", dest.longitude)
+                intent.putExtra("TARGET_NAME", event.destinationName)
 
-                    putExtra("TARGET_LAT", dest.latitude)
-                    putExtra("TARGET_LON", dest.longitude)
-                    putExtra("TARGET_NAME", event.destinationName)
+                // Pass the route coordinates for the AR MiniMap
+                val points = viewModel.routePoints.value ?: event.route.waypoints.map { GeoPoint(it.location.latitude, it.location.longitude) }
+                val lats = points.map { it.latitude }.toDoubleArray()
+                val lons = points.map { it.longitude }.toDoubleArray()
+                intent.putExtra("ROUTE_LATS", lats)
+                intent.putExtra("ROUTE_LONS", lons)
 
-                    val points = viewModel.routePoints.value ?: event.route.waypoints.map {
-                        GeoPoint(it.location.latitude, it.location.longitude)
-                    }
-                    val lats = points.map { it.latitude }.toDoubleArray()
-                    val lons = points.map { it.longitude }.toDoubleArray()
-
-                    putExtra("ROUTE_LATS", lats)
-                    putExtra("ROUTE_LONS", lons)
-                    putExtra("MAP_TYPE", binding.mapView.tileProvider.tileSource.name())
-                }
-
-                // Set up the Geofence for the destination!
-                val destNode = event.route.waypoints.last().location
-                addDestinationGeofence(destNode.latitude, destNode.longitude, event.destinationName)
-
+                // Launch using the Result Launcher so we can catch the Cancel button
                 arNavigationLauncher.launch(intent)
             }
             is MapUiEvent.MoveCameraTo -> {
@@ -430,41 +389,6 @@ class MapFragment : Fragment() {
             is MapUiEvent.OffRoute -> Snackbar.make(binding.root, "You are off route", Snackbar.LENGTH_SHORT).show()
             is MapUiEvent.ShowArrivalDialog -> showArrivalDialog(event.buildingName)
             else -> {}
-        }
-    }
-
-    // --- GEOFENCING LOGIC ---
-    @SuppressLint("MissingPermission")
-    private fun addDestinationGeofence(targetLat: Double, targetLon: Double, targetName: String) {
-        if (!hasLocationPermission()) return
-
-        val geofence = Geofence.Builder()
-            .setRequestId(targetName)
-            .setCircularRegion(targetLat, targetLon, GEOFENCE_RADIUS_IN_METERS)
-            .setExpirationDuration(Geofence.NEVER_EXPIRE)
-            .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER or Geofence.GEOFENCE_TRANSITION_EXIT)
-            .build()
-
-        val geofencingRequest = GeofencingRequest.Builder()
-            .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
-            .addGeofence(geofence)
-            .build()
-
-        val intent = Intent(requireContext(), com.campus.arnav.receiver.GeofenceBroadcastReceiver::class.java)
-        val pendingIntent = android.app.PendingIntent.getBroadcast(
-            requireContext(),
-            0,
-            intent,
-            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_MUTABLE
-        )
-
-        geofencingClient.addGeofences(geofencingRequest, pendingIntent)?.run {
-            addOnSuccessListener {
-                android.util.Log.d("GEOFENCE", "Successfully added geofence for $targetName!")
-            }
-            addOnFailureListener {
-                android.util.Log.e("GEOFENCE", "Failed to add geofence: ${it.message}")
-            }
         }
     }
 
