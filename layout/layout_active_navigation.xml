@@ -68,15 +68,6 @@
             android:orientation="vertical"
             android:padding="19dp">
 
-            <com.google.android.material.progressindicator.LinearProgressIndicator
-                android:id="@+id/progressRoute"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                app:indicatorColor="?attr/colorPrimary"
-                app:trackColor="?attr/colorSurfaceVariant"
-                app:trackCornerRadius="4dp"
-                app:trackThickness="8dp"
-                tools:progress="35" />
 
             <LinearLayout
                 android:layout_width="match_parent"

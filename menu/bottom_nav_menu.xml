@@ -12,9 +12,9 @@
         android:title="@string/search" />
 
     <item
-        android:id="@+id/qrScannerFragment"
-        android:icon="@drawable/ic_qr_code"
-        android:title="@string/qr_scanner" />
+        android:id="@+id/navigation_satellite"
+        android:icon="@drawable/ic_satellite"
+        android:title="Satellite" />
 
     <item
         android:id="@+id/settingsFragment"
