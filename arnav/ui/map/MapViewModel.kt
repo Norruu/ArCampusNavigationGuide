@@ -7,6 +7,9 @@ import com.campus.arnav.data.model.Direction
 import com.campus.arnav.data.model.CampusLocation
 import com.campus.arnav.data.model.Route
 import com.campus.arnav.data.model.BuildingType
+import com.campus.arnav.data.model.Waypoint
+import com.campus.arnav.data.model.WaypointType
+import com.campus.arnav.data.model.NavigationStep // <-- Fixed the import here!
 import com.campus.arnav.data.repository.CampusRepository
 import com.campus.arnav.data.repository.LocationRepository
 import com.campus.arnav.data.repository.NavigationRepository
@@ -22,7 +25,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch  // ← THIS WAS THE MISSING IMPORT
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import org.osmdroid.util.GeoPoint
 import javax.inject.Inject
@@ -90,6 +93,8 @@ class MapViewModel @Inject constructor(
     private val SNAP_REDRAW_THRESHOLD_METRES = 3.0
     private var lastSnapLocation: CampusLocation? = null
 
+    private val DIRECT_ROUTING_THRESHOLD_METRES = 50.0
+
     // ============== INITIALIZATION ==============
 
     init {
@@ -127,7 +132,7 @@ class MapViewModel @Inject constructor(
         locationJob?.cancel()
         locationJob = viewModelScope.launch {
             locationRepository.locationUpdates
-                .catch { e: Throwable ->  // ← explicit type fixes "Cannot infer type" error
+                .catch { e: Throwable ->
                     android.util.Log.e("MapViewModel", "Location error: ${e.message}")
                 }
                 .collect { location ->
@@ -165,6 +170,11 @@ class MapViewModel @Inject constructor(
         if (points.size < 2) return
 
         val userGeo = GeoPoint(location.latitude, location.longitude)
+
+        if (_activeRoute.value?.id == "direct_line" || points.size == 2) {
+            _routePoints.value = listOf(userGeo, points.last())
+            return
+        }
 
         val nearestIdx = points.indices.minByOrNull { i ->
             val p = points[i]
@@ -205,12 +215,50 @@ class MapViewModel @Inject constructor(
                 return@launch
             }
 
+            val distToDest = calculateDistance(currentLocation, building.location)
+            if (distToDest <= DIRECT_ROUTING_THRESHOLD_METRES) {
+                createDirectDisplacementRoute(currentLocation, building, distToDest)
+                _isLoading.value = false
+                return@launch
+            }
+
             if (_isPathfindingReady.value && _useSmartPathfinding.value) {
                 calculateSmartRoute(currentLocation, building)
             } else {
                 calculateSimpleRoute(currentLocation, building)
             }
             _isLoading.value = false
+        }
+    }
+
+    private fun createDirectDisplacementRoute(start: CampusLocation, building: Building, distance: Double) {
+        try {
+            // FIX: Using proper WaypointType enums
+            val startWaypoint = Waypoint(location = start, type = WaypointType.START)
+            val endWaypoint = Waypoint(location = building.location, type = WaypointType.END) // Changed to END
+
+            // FIX: Using NavigationStep and providing all required variables
+            val directStep = NavigationStep(
+                instruction = "Walk directly to ${building.name}",
+                distance = distance,
+                direction = Direction.FORWARD,
+                startLocation = start,
+                endLocation = building.location
+            )
+
+            val directRoute = Route(
+                id = "direct_line",
+                origin = start,
+                destination = building.location,
+                waypoints = listOf(startWaypoint, endWaypoint),
+                steps = listOf(directStep),
+                totalDistance = distance,
+                estimatedTime = (distance / 1.4).toLong()
+            )
+
+            handleRouteSuccess(directRoute, building)
+        } catch (e: Exception) {
+            android.util.Log.e("MapViewModel", "Error creating direct route: ${e.message}")
         }
     }
 
@@ -221,15 +269,24 @@ class MapViewModel @Inject constructor(
         when (val routeResult = campusPathfinding.findRoute(start, target, target)) {
             is RouteResult.Success -> handleRouteSuccess(routeResult.route, building)
             is RouteResult.NoRouteFound -> calculateSimpleRoute(currentLocation, building)
-            is RouteResult.Error -> _uiEvent.emit(MapUiEvent.ShowError(routeResult.message))
+            is RouteResult.Error -> {
+                val dist = calculateDistance(currentLocation, building.location)
+                createDirectDisplacementRoute(currentLocation, building, dist)
+            }
         }
     }
 
     private suspend fun calculateSimpleRoute(currentLocation: CampusLocation, building: Building) {
         when (val result = navigationRepository.calculateRoute(currentLocation, building.location)) {
             is RouteResult.Success -> handleRouteSuccess(result.route, building)
-            is RouteResult.Error -> _uiEvent.emit(MapUiEvent.ShowError("Route Error: ${result.message}"))
-            is RouteResult.NoRouteFound -> _uiEvent.emit(MapUiEvent.ShowError("No route found: ${result.message}"))
+            is RouteResult.Error -> {
+                val dist = calculateDistance(currentLocation, building.location)
+                createDirectDisplacementRoute(currentLocation, building, dist)
+            }
+            is RouteResult.NoRouteFound -> {
+                val dist = calculateDistance(currentLocation, building.location)
+                createDirectDisplacementRoute(currentLocation, building, dist)
+            }
         }
     }
 
@@ -329,11 +386,6 @@ class MapViewModel @Inject constructor(
     private fun updateNavigationProgress(location: CampusLocation, state: NavigationState.Navigating) {
         val route = state.route
 
-        if (isOffRoute(location, route)) {
-            viewModelScope.launch { _uiEvent.emit(MapUiEvent.OffRoute) }
-            return
-        }
-
         val finalDestination = route.waypoints.lastOrNull()?.location
         val distanceToFinish = if (finalDestination != null) calculateDistance(location, finalDestination) else 0.0
 
@@ -341,6 +393,55 @@ class MapViewModel @Inject constructor(
             feedbackManager.vibrateForArrival()
             feedbackManager.speak("You have arrived at your destination.")
             onArrived()
+            return
+        }
+
+        if (distanceToFinish <= DIRECT_ROUTING_THRESHOLD_METRES && route.id != "direct_line") {
+            val building = _selectedBuilding.value
+            if (building != null) {
+
+                // FIX: Using proper WaypointType enums
+                val startWaypoint = Waypoint(location = location, type = WaypointType.START)
+                val endWaypoint = Waypoint(location = building.location, type = WaypointType.END) // Changed to END
+
+                // FIX: Using NavigationStep and providing all required variables
+                val directStep = NavigationStep(
+                    instruction = "Walk directly to ${building.name}",
+                    distance = distanceToFinish,
+                    direction = Direction.FORWARD,
+                    startLocation = location,
+                    endLocation = building.location
+                )
+
+                val directRoute = Route(
+                    id = "direct_line",
+                    origin = location,
+                    destination = building.location,
+                    waypoints = listOf(startWaypoint, endWaypoint),
+                    steps = listOf(directStep),
+                    totalDistance = distanceToFinish,
+                    estimatedTime = (distanceToFinish / 1.4).toLong()
+                )
+
+                _routePoints.value = listOf(
+                    GeoPoint(location.latitude, location.longitude),
+                    GeoPoint(building.location.latitude, building.location.longitude)
+                )
+
+                _activeRoute.value = directRoute
+                _navigationState.value = state.copy(
+                    route = directRoute,
+                    currentStep = directStep,
+                    currentStepIndex = 0,
+                    distanceToNextWaypoint = distanceToFinish,
+                    remainingDistance = distanceToFinish
+                )
+                return
+            }
+        }
+
+        if (isOffRoute(location, route)) {
+            viewModelScope.launch { _uiEvent.emit(MapUiEvent.OffRoute) }
             return
         }
 

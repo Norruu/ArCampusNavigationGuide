@@ -10,7 +10,9 @@ import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
@@ -32,6 +34,7 @@ import com.campus.arnav.data.model.BuildingType
 import com.campus.arnav.data.model.Direction
 import com.campus.arnav.data.model.Route
 import com.campus.arnav.databinding.FragmentMapBinding
+import com.campus.arnav.service.NavigationService
 import com.campus.arnav.ui.MainActivity
 import com.campus.arnav.ui.ar.ARNavigationActivity
 import com.campus.arnav.ui.map.components.CampusPathsOverlay
@@ -87,7 +90,6 @@ class MapFragment : Fragment() {
 
     private val mainActivity get() = activity as? MainActivity
 
-    // NEW: Listens for the AR screen to close and checks if we need to cancel navigation
     private val arNavigationLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -149,7 +151,19 @@ class MapFragment : Fragment() {
         binding.fabCompass.setOnClickListener { toggleCompassMode() }
         binding.fabArMode.setOnClickListener { viewModel.switchToARMode() }
 
-        binding.navigationPanel.btnStartNavigation.setOnClickListener { viewModel.startNavigation() }
+        binding.navigationPanel.btnStartNavigation.setOnClickListener {
+            if (!Settings.canDrawOverlays(requireContext())) {
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:${requireContext().packageName}")
+                )
+                startActivity(intent)
+                Toast.makeText(requireContext(), "Please allow overlay permission for background navigation.", Toast.LENGTH_LONG).show()
+            } else {
+                viewModel.startNavigation()
+            }
+        }
+
         binding.navigationPanel.btnClosePanel.setOnClickListener { viewModel.stopNavigation() }
         binding.activeNavigationPanel.btnEndNavigation.setOnClickListener { viewModel.stopNavigation() }
     }
@@ -214,10 +228,7 @@ class MapFragment : Fragment() {
                         container.visibility = View.VISIBLE
                     }
                     startHeight = container.layoutParams.height
-
-                    // FIXED: This line makes the drag math work correctly
                     startY = event.rawY
-
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -316,6 +327,7 @@ class MapFragment : Fragment() {
                 binding.fabArMode.visibility = View.GONE
                 mainActivity?.setBottomNavVisibility(true)
                 clearRoute()
+                stopNavigationService()
             }
             is NavigationState.Previewing -> {
                 binding.navigationPanel.root.visibility = View.VISIBLE
@@ -333,6 +345,7 @@ class MapFragment : Fragment() {
                     binding.navigationPanel.tvEta.text = "..."
                 }
                 clearRoute()
+                stopNavigationService()
             }
             is NavigationState.Navigating -> {
                 binding.navigationPanel.root.visibility = View.GONE
@@ -352,6 +365,7 @@ class MapFragment : Fragment() {
                 binding.fabArMode.visibility = View.GONE
                 mainActivity?.setBottomNavVisibility(true)
                 clearRoute()
+                stopNavigationService()
             }
         }
     }
@@ -365,14 +379,12 @@ class MapFragment : Fragment() {
                 intent.putExtra("TARGET_LON", dest.longitude)
                 intent.putExtra("TARGET_NAME", event.destinationName)
 
-                // Pass the route coordinates for the AR MiniMap
                 val points = viewModel.routePoints.value ?: event.route.waypoints.map { GeoPoint(it.location.latitude, it.location.longitude) }
                 val lats = points.map { it.latitude }.toDoubleArray()
                 val lons = points.map { it.longitude }.toDoubleArray()
                 intent.putExtra("ROUTE_LATS", lats)
                 intent.putExtra("ROUTE_LONS", lons)
 
-                // Launch using the Result Launcher so we can catch the Cancel button
                 arNavigationLauncher.launch(intent)
             }
             is MapUiEvent.MoveCameraTo -> {
@@ -495,11 +507,41 @@ class MapFragment : Fragment() {
 
     private fun updateActiveNavigation(state: NavigationState.Navigating) {
         val step = state.currentStep
+        val distText = formatDistance(state.distanceToNextWaypoint)
+
         binding.activeNavigationPanel.tvCurrentInstruction.text = step.instruction
-        binding.activeNavigationPanel.tvDistanceToNext.text = "in ${formatDistance(state.distanceToNextWaypoint)}"
+        binding.activeNavigationPanel.tvDistanceToNext.text = "in $distText"
         binding.activeNavigationPanel.tvRemainingDistance.text = formatDistance(state.remainingDistance)
         binding.activeNavigationPanel.tvRemainingTime.text = formatTime(state.remainingTime)
         binding.activeNavigationPanel.ivDirectionIcon.setImageResource(getDirectionIcon(step.direction))
+
+        updateNavigationService(step.instruction, distText, getDirectionCode(step.direction))
+    }
+
+    private fun updateNavigationService(instruction: String, distance: String, directionCode: String) {
+        if (!Settings.canDrawOverlays(requireContext())) return
+
+        val intent = Intent(requireContext(), NavigationService::class.java).apply {
+            action = NavigationService.ACTION_UPDATE
+            putExtra(NavigationService.EXTRA_INSTRUCTION, instruction)
+            putExtra(NavigationService.EXTRA_DISTANCE, distance)
+            putExtra(NavigationService.EXTRA_DIRECTION, directionCode)
+        }
+        ContextCompat.startForegroundService(requireContext(), intent)
+    }
+
+    // --- CRITICAL FIX: Cleanly stop the service using stopService() to prevent Android 8+ crashes ---
+    private fun stopNavigationService() {
+        val intent = Intent(requireContext(), NavigationService::class.java)
+        requireContext().stopService(intent)
+    }
+
+    private fun getDirectionCode(direction: Direction): String {
+        return when (direction) {
+            Direction.RIGHT, Direction.SHARP_RIGHT, Direction.SLIGHT_RIGHT -> "right"
+            Direction.LEFT, Direction.SHARP_LEFT, Direction.SLIGHT_LEFT -> "left"
+            else -> "straight"
+        }
     }
 
     private fun updateBuildingMarkers(buildings: List<Building>) {
@@ -570,7 +612,6 @@ class MapFragment : Fragment() {
             mapView.setTileSource(googleSatellite)
             campusPathsOverlay.addPathsToMap(mapView)
 
-            // Reorder overlays
             mapView.overlays.remove(routePolyline)
             mapView.overlays.add(routePolyline)
             myLocationOverlay?.let { mapView.overlays.remove(it); mapView.overlays.add(it) }
@@ -622,6 +663,13 @@ class MapFragment : Fragment() {
         mapView.onResume()
         if (myLocationOverlay == null && hasLocationPermission()) setupLocationOverlay()
         myLocationOverlay?.enableMyLocation()
+
+        if (viewModel.navigationState.value is NavigationState.Navigating) {
+            val hideIntent = Intent(requireContext(), NavigationService::class.java).apply {
+                action = NavigationService.ACTION_HIDE_OVERLAY
+            }
+            ContextCompat.startForegroundService(requireContext(), hideIntent)
+        }
     }
 
     override fun onPause() {
@@ -629,6 +677,13 @@ class MapFragment : Fragment() {
         mapView.onPause()
         myLocationOverlay?.disableMyLocation()
         mapCompassManager.stop()
+
+        if (viewModel.navigationState.value is NavigationState.Navigating) {
+            val showIntent = Intent(requireContext(), NavigationService::class.java).apply {
+                action = NavigationService.ACTION_SHOW_OVERLAY
+            }
+            ContextCompat.startForegroundService(requireContext(), showIntent)
+        }
     }
 
     override fun onDestroyView() {

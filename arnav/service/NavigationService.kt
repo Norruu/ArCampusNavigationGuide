@@ -9,6 +9,7 @@ import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
 import android.view.*
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
 import com.campus.arnav.R
@@ -21,6 +22,7 @@ class NavigationService : Service() {
 
     private var latestInstruction = "Navigating..."
     private var latestDistance = ""
+    private var latestDirectionCode = "straight"
 
     companion object {
         const val CHANNEL_ID = "CampusNavigationChannel"
@@ -35,24 +37,33 @@ class NavigationService : Service() {
 
         const val EXTRA_INSTRUCTION = "EXTRA_INSTRUCTION"
         const val EXTRA_DISTANCE = "EXTRA_DISTANCE"
+        const val EXTRA_DIRECTION = "EXTRA_DIRECTION"
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.hasExtra(EXTRA_INSTRUCTION) == true) {
             latestInstruction = intent.getStringExtra(EXTRA_INSTRUCTION) ?: latestInstruction
             latestDistance = intent.getStringExtra(EXTRA_DISTANCE) ?: latestDistance
+            latestDirectionCode = intent.getStringExtra(EXTRA_DIRECTION) ?: latestDirectionCode
         }
+
+        // --- CRITICAL FIX: ALWAYS start the foreground notification immediately
+        // to prevent the dreaded ForegroundServiceDidNotStartInTimeException crash. ---
+        startOrUpdateForegroundService(latestInstruction, latestDistance)
 
         when (intent?.action) {
             ACTION_START, ACTION_UPDATE -> {
-                startOrUpdateForegroundService(latestInstruction, latestDistance)
-                updateFloatingWindowText() // Updates widget if it's currently showing
+                updateFloatingWindowText()
             }
-            ACTION_SHOW_OVERLAY -> showFloatingWindow()
-            ACTION_HIDE_OVERLAY -> hideFloatingWindow()
+            ACTION_SHOW_OVERLAY -> {
+                showFloatingWindow()
+            }
+            ACTION_HIDE_OVERLAY -> {
+                hideFloatingWindow()
+            }
             ACTION_STOP -> {
                 hideFloatingWindow()
-                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopForeground(true)
                 stopSelf()
             }
         }
@@ -64,8 +75,6 @@ class NavigationService : Service() {
         if (floatingView != null || !android.provider.Settings.canDrawOverlays(this)) return
 
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-
-        // 1. Inflate the NEW slim floating layout
         val themeContext = android.view.ContextThemeWrapper(this, R.style.Theme_CampusARNav)
         floatingView = LayoutInflater.from(themeContext).inflate(R.layout.layout_floating_navigation, null)
 
@@ -75,7 +84,6 @@ class NavigationService : Service() {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
-        // 2. Lock parameters (No focusable so you can click things behind it)
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -84,27 +92,21 @@ class NavigationService : Service() {
             PixelFormat.TRANSLUCENT
         )
 
-        // 3. Stick it exactly to the top center of the screen
         params.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
         params.y = 0
 
-        // 4. Handle tapping the "X" Cancel Button
         floatingView?.findViewById<View>(R.id.btnCancelNav)?.setOnClickListener {
-            // Stop the background service and remove the window
             val stopIntent = Intent(this, NavigationService::class.java)
             stopIntent.action = ACTION_STOP
             startService(stopIntent)
 
-            // Open the app and completely reset it to cancel the navigation
             val openIntent = Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             }
             startActivity(openIntent)
         }
 
-        // 5. Handle tapping anywhere else on the banner
         floatingView?.setOnClickListener {
-            // Just return to the app smoothly (the onResume will hide the banner)
             val openIntent = Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             }
@@ -119,9 +121,17 @@ class NavigationService : Service() {
         floatingView?.let { view ->
             val tvInstruction = view.findViewById<TextView>(R.id.tvCurrentInstruction)
             val tvDistance = view.findViewById<TextView>(R.id.tvDistanceToNext)
+            val ivIcon = view.findViewById<ImageView>(R.id.ivDirectionIcon)
 
-            if (tvInstruction != null) tvInstruction.text = latestInstruction
-            if (tvDistance != null) tvDistance.text = latestDistance
+            tvInstruction?.text = latestInstruction
+            tvDistance?.text = latestDistance
+
+            val iconRes = when (latestDirectionCode) {
+                "right" -> R.drawable.ic_turn_right
+                "left" -> R.drawable.ic_turn_left
+                else -> R.drawable.ic_arrow_up
+            }
+            ivIcon?.setImageResource(iconRes)
         }
     }
 
@@ -132,7 +142,6 @@ class NavigationService : Service() {
         }
     }
 
-    // ... KEEP your existing startOrUpdateForegroundService and buildNotification functions here ...
     private fun startOrUpdateForegroundService(instruction: String, distance: String) {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
