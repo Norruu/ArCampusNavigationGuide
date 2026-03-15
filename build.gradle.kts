@@ -4,6 +4,7 @@ plugins {
     id("com.google.devtools.ksp")
     id("com.google.dagger.hilt.android")
     id("kotlin-parcelize")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -95,8 +96,14 @@ dependencies {
     // Maps (OSMDroid)
     implementation("org.osmdroid:osmdroid-android:6.1.18")
 
+    //Google
+    //implementation(platform("com.google.firebase:firebase-bom:34.10.0"))
+    implementation("com.google.firebase:firebase-firestore-ktx:24.10.0")
+    implementation("com.google.firebase:firebase-auth-ktx:22.3.0")
+
     // OSMDroid Bonus Pack for routing and additional features
     implementation("com.github.MKergall:osmbonuspack:6.9.0")
+
 
     // Library required for OSMDroid configuration and tile caching
     implementation("androidx.preference:preference-ktx:1.2.1")

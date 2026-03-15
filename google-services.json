@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "248748089706",
+    "project_id": "arcampusnavigationguide",
+    "storage_bucket": "arcampusnavigationguide.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:248748089706:android:32dd4b4b3d7a96f8268513",
+        "android_client_info": {
+          "package_name": "com.campus.arnav"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBTLvONEGLoV7iGSN4qjv_TDmtxnDg4EcI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
