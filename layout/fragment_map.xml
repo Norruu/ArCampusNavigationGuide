@@ -11,44 +11,140 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <HorizontalScrollView
-        android:id="@+id/categoryContainer"
+    <!-- Top bar: Search + Settings + Categories -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="top"
-        android:layout_marginTop="16dp"
-        android:layout_marginHorizontal="12dp"
-        android:scrollbars="none"
-        android:clipToPadding="false"
-        android:paddingEnd="16dp"
-        android:visibility="visible">
+        android:orientation="vertical"
+        android:paddingTop="12dp"
+        android:paddingHorizontal="16dp">
 
-        <com.google.android.material.chip.ChipGroup
-            android:id="@+id/categoryChipGroup"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:singleSelection="true"
-            app:selectionRequired="true"
-            android:paddingVertical="4dp"
-            app:chipSpacingHorizontal="8dp">
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-            <com.google.android.material.chip.Chip
-                android:id="@+id/chipAll"
-                style="@style/Widget.Material3.Chip.Filter"
+            <!-- Search bar with EditText -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/searchBar"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                app:cardCornerRadius="22dp"
+                app:cardElevation="4dp"
+                app:cardBackgroundColor="@color/white"
+                app:strokeWidth="0dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="14dp">
+
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:src="@drawable/ic_search"
+                        app:tint="@color/text_secondary_light"
+                        android:importantForAccessibility="no" />
+
+                    <EditText
+                        android:id="@+id/etMapSearch"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:layout_marginStart="10dp"
+                        android:background="@android:color/transparent"
+                        android:hint="Search for place"
+                        android:textColorHint="@color/text_secondary_light"
+                        android:textColor="@color/black"
+                        android:textSize="14sp"
+                        android:imeOptions="actionDone"
+                        android:inputType="text"
+                        android:maxLines="1" />
+
+                    <ImageView
+                        android:id="@+id/btnMapClearSearch"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:src="@drawable/ic_close"
+                        app:tint="@color/text_secondary_light"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:visibility="gone"
+                        android:importantForAccessibility="no" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Settings gear -->
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/fabSettings"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:checked="true"
-                android:text="All" />
+                android:layout_marginStart="10dp"
+                android:src="@drawable/ic_settings"
+                app:backgroundTint="@color/primary_green"
+                app:fabCustomSize="44dp"
+                app:maxImageSize="22dp"
+                app:tint="@color/white"
+                app:elevation="4dp" />
 
-        </com.google.android.material.chip.ChipGroup>
-    </HorizontalScrollView>
+        </LinearLayout>
 
+        <!-- Search dropdown suggestions -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/searchDropdown"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="54dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="6dp"
+            app:cardBackgroundColor="@color/white"
+            app:strokeWidth="0dp"
+            android:visibility="gone">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvMapSearchResults"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:clipToPadding="false"
+                android:paddingVertical="8dp" />
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Category chips -->
+        <HorizontalScrollView
+            android:id="@+id/categoryContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:scrollbars="none"
+            android:clipToPadding="false">
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/categoryChipGroup"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:singleSelection="true"
+                app:selectionRequired="true"
+                android:paddingVertical="4dp"
+                app:chipSpacingHorizontal="8dp" />
+
+        </HorizontalScrollView>
+
+    </LinearLayout>
+
+    <!-- FABs: AR, Satellite, Recenter, Compass -->
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="end|bottom|right"
-        android:layout_marginTop="55dp"
+        android:layout_gravity="end|bottom"
         android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
         android:orientation="vertical">
 
         <com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -58,12 +154,24 @@
             android:contentDescription="AR Mode"
             android:src="@drawable/ic_ar"
             android:visibility="gone"
-            app:backgroundTint="?attr/colorPrimary"
+            app:backgroundTint="@color/primary_green"
             app:fabCustomSize="48dp"
             app:maxImageSize="24dp"
             android:layout_marginBottom="12dp"
             app:tint="@android:color/white"
             tools:visibility="visible" />
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/fabSatellite"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:contentDescription="Satellite"
+            android:src="@drawable/ic_satellite"
+            app:backgroundTint="@color/white"
+            app:fabCustomSize="48dp"
+            app:maxImageSize="24dp"
+            app:tint="@color/primary_green" />
 
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/fabRecenter"
@@ -72,10 +180,10 @@
             android:layout_marginBottom="12dp"
             android:contentDescription="Recenter"
             android:src="@drawable/ic_my_location"
-            app:backgroundTint="?attr/colorSurface"
+            app:backgroundTint="@color/white"
             app:fabCustomSize="48dp"
             app:maxImageSize="24dp"
-            app:tint="?attr/colorPrimary" />
+            app:tint="@color/primary_green" />
 
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/fabCompass"
@@ -84,12 +192,28 @@
             android:layout_marginBottom="12dp"
             android:contentDescription="Compass"
             android:src="@drawable/ic_compass"
-            app:backgroundTint="?attr/colorSurface"
+            app:backgroundTint="@color/white"
             app:fabCustomSize="48dp"
             app:maxImageSize="24dp"
             app:tint="@null" />
 
     </LinearLayout>
+
+    <!-- Dashboard toggle button (bottom center) -->
+    <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+        android:id="@+id/fabToggleDashboard"
+        android:layout_width="wrap_content"
+        android:layout_height="44dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="16dp"
+        android:text="DASHBOARD"
+        android:textAllCaps="true"
+        android:textSize="12sp"
+        app:backgroundTint="@color/primary_green"
+        app:icon="@drawable/ic_dashboard"
+        app:iconTint="@color/white"
+        app:elevation="8dp"
+        app:shapeAppearanceOverlay="@style/ShapeAppearance.Rounded" />
 
     <include
         android:id="@+id/navigationPanel"
@@ -123,7 +247,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:indeterminate="true"
-            app:indicatorColor="#0A84FF"
+            app:indicatorColor="@color/primary_green"
             app:indicatorSize="56dp"
             app:trackThickness="5dp"
             app:indicatorDirectionCircular="clockwise" />

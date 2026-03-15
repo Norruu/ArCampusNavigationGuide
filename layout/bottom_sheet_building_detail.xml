@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_sheet_top_rounded"
+    android:paddingBottom="24dp">
+
+    <!-- Drag Handle -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_handle_bar" />
+
+    <!-- Building Image -->
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="match_parent"
+        android:layout_height="140dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginHorizontal="20dp"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="0dp"
+        app:strokeWidth="0dp">
+
+        <ImageView
+            android:id="@+id/ivDetailImage"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:src="@drawable/bg_topographic"
+            android:importantForAccessibility="no" />
+
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Building Name -->
+    <TextView
+        android:id="@+id/tvDetailName"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginTop="14dp"
+        android:textColor="@color/primary_green_dark"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        tools:text="MAIN GATE" />
+
+    <!-- Description label -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginTop="10dp"
+        android:text="Description:"
+        android:textColor="@color/primary_green"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <!-- Description text (THIS WAS MISSING) -->
+    <TextView
+        android:id="@+id/tvDetailDescription"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginTop="4dp"
+        android:textColor="@color/text_secondary_light"
+        android:textSize="13sp"
+        android:lineSpacingExtra="3dp"
+        android:maxLines="3"
+        android:ellipsize="end"
+        tools:text="Main gate is the main entrance of the people when entering the campus" />
+
+    <!-- Photos label -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginTop="12dp"
+        android:text="Photos"
+        android:textColor="@color/primary_green"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <!-- Photo thumbnails -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvBuildingPhotos"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:layout_marginTop="6dp"
+        android:layout_marginHorizontal="20dp"
+        android:orientation="horizontal"
+        android:clipToPadding="false" />
+
+    <!-- Navigate prompt -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="16dp"
+        android:text="Would you like to navigate to"
+        android:textColor="@color/text_secondary_light"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/tvNavigateToName"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:textColor="@color/primary_green_dark"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        tools:text="Main gate?" />
+
+    <!-- Yes / No Buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:layout_marginHorizontal="20dp"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnNo"
+            android:layout_width="0dp"
+            android:layout_height="46dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="8dp"
+            android:text="No"
+            android:textAllCaps="false"
+            android:textSize="15sp"
+            app:backgroundTint="@color/accent_red"
+            app:cornerRadius="12dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnYes"
+            android:layout_width="0dp"
+            android:layout_height="46dp"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:text="Yes"
+            android:textAllCaps="false"
+            android:textSize="15sp"
+            app:backgroundTint="@color/primary_green"
+            app:cornerRadius="12dp" />
+
+    </LinearLayout>
+
+</LinearLayout>

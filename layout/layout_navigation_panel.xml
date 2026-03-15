@@ -18,6 +18,7 @@
         android:orientation="vertical"
         android:paddingBottom="24dp">
 
+        <!-- Header with building name + cancel -->
         <LinearLayout
             android:id="@+id/miniHeaderLayout"
             android:layout_width="match_parent"
@@ -26,7 +27,7 @@
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingHorizontal="20dp"
-            android:paddingBottom="16dp">
+            android:paddingBottom="12dp">
 
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/destinationIconCard"
@@ -35,7 +36,7 @@
                 app:cardCornerRadius="12dp"
                 app:cardElevation="0dp"
                 app:strokeWidth="0dp"
-                app:cardBackgroundColor="#E3F2FD">
+                app:cardBackgroundColor="@color/primary_mint">
 
                 <ImageView
                     android:id="@+id/ivDestinationIcon"
@@ -43,7 +44,7 @@
                     android:layout_height="24dp"
                     android:layout_gravity="center"
                     android:src="@drawable/ic_school"
-                    app:tint="?attr/colorPrimary" />
+                    app:tint="@color/primary_green" />
             </com.google.android.material.card.MaterialCardView>
 
             <LinearLayout
@@ -57,12 +58,12 @@
                     android:id="@+id/tvDestinationName"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textColor="?attr/colorOnSurface"
-                    android:textSize="20sp"
+                    android:textColor="@color/primary_green_dark"
+                    android:textSize="18sp"
                     android:textStyle="bold"
                     android:maxLines="1"
                     android:ellipsize="end"
-                    tools:text="Main Library" />
+                    tools:text="Gymnasium" />
 
                 <TextView
                     android:id="@+id/tvDestinationDescription"
@@ -70,10 +71,10 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
                     android:textColor="?attr/colorOnSurfaceVariant"
-                    android:textSize="14sp"
+                    android:textSize="13sp"
                     android:maxLines="1"
                     android:ellipsize="end"
-                    tools:text="Central campus library" />
+                    tools:text="Gymnasium" />
 
                 <TextView
                     android:id="@+id/tvRouteInfoMini"
@@ -88,69 +89,86 @@
 
             </LinearLayout>
 
-            <LinearLayout
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnClosePanel"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnMiniStart"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:layout_marginEnd="8dp"
-                    android:insetLeft="0dp"
-                    android:insetTop="0dp"
-                    android:insetRight="0dp"
-                    android:insetBottom="0dp"
-                    android:visibility="gone"
-                    app:backgroundTint="#007AFF"
-                    app:cornerRadius="24dp"
-                    app:elevation="0dp"
-                    app:icon="@drawable/ic_navigation"
-                    app:iconGravity="textStart"
-                    app:iconPadding="0dp"
-                    app:iconTint="@android:color/white" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnClosePanel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:minWidth="0dp"
-                    android:paddingHorizontal="12dp"
-                    android:text="CANCEL"
-                    android:textSize="12sp"
-                    android:letterSpacing="0.05"
-                    android:textColor="@android:color/white"
-                    app:backgroundTint="#D32F2F"
-                    app:cornerRadius="18dp"
-                    app:elevation="0dp" />
-
-            </LinearLayout>
+                android:layout_height="36dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="0dp"
+                android:paddingHorizontal="16dp"
+                android:text="Cancel"
+                android:textSize="12sp"
+                android:textAllCaps="false"
+                android:textColor="@android:color/white"
+                app:backgroundTint="@color/accent_red"
+                app:cornerRadius="18dp"
+                app:elevation="0dp" />
 
         </LinearLayout>
 
         <View
-            android:id="@+id/panelDivider"
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:layout_marginTop="8dp"
             android:alpha="0.1"
             android:background="?attr/colorOutline" />
 
+        <!-- 🆕 Walking / Vehicle Toggle -->
         <LinearLayout
             android:id="@+id/expandedContentLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginHorizontal="20dp"
-            android:layout_marginTop="20dp"
+            android:layout_marginTop="16dp"
             android:orientation="vertical">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnWalking"
+                    style="@style/Widget.Material3.Button"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="6dp"
+                    android:text="Walking"
+                    android:textAllCaps="false"
+                    android:textSize="14sp"
+                    app:backgroundTint="@color/primary_green"
+                    app:cornerRadius="12dp"
+                    app:icon="@drawable/ic_walking"
+                    app:iconGravity="textStart"
+                    app:iconPadding="6dp"
+                    app:iconTint="@color/white" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnVehicle"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:text="Vehicle"
+                    android:textAllCaps="false"
+                    android:textSize="14sp"
+                    app:cornerRadius="12dp"
+                    app:strokeColor="@color/primary_green"
+                    app:icon="@drawable/ic_car"
+                    app:iconGravity="textStart"
+                    app:iconPadding="6dp"
+                    app:iconTint="@color/primary_green" />
+
+            </LinearLayout>
+
+            <!-- Distance / Time cards -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
                 android:orientation="horizontal">
 
                 <com.google.android.material.card.MaterialCardView
@@ -158,7 +176,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="8dp"
                     android:layout_weight="1"
-                    app:cardBackgroundColor="?attr/colorSurfaceVariant"
+                    app:cardBackgroundColor="@color/card_bg_light"
                     app:cardCornerRadius="16dp"
                     app:cardElevation="0dp"
                     app:strokeWidth="0dp">
@@ -170,18 +188,11 @@
                         android:orientation="vertical"
                         android:padding="16dp">
 
-                        <ImageView
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:src="@drawable/ic_walking"
-                            app:tint="?attr/colorPrimary" />
-
                         <TextView
                             android:id="@+id/tvDistance"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:textColor="?attr/colorOnSurface"
+                            android:textColor="@color/primary_green_dark"
                             android:textSize="22sp"
                             android:textStyle="bold"
                             tools:text="450 m" />
@@ -200,7 +211,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
                     android:layout_weight="1"
-                    app:cardBackgroundColor="?attr/colorSurfaceVariant"
+                    app:cardBackgroundColor="@color/card_bg_light"
                     app:cardCornerRadius="16dp"
                     app:cardElevation="0dp"
                     app:strokeWidth="0dp">
@@ -212,18 +223,11 @@
                         android:orientation="vertical"
                         android:padding="16dp">
 
-                        <ImageView
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:src="@drawable/ic_time"
-                            app:tint="?attr/colorPrimary" />
-
                         <TextView
                             android:id="@+id/tvEta"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:textColor="?attr/colorOnSurface"
+                            android:textColor="@color/primary_green_dark"
                             android:textSize="22sp"
                             android:textStyle="bold"
                             tools:text="5 min" />
@@ -231,22 +235,24 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Walking"
+                            android:text="Time"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="12sp" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
 
+            <!-- Start Navigation Button -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnStartNavigation"
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
-                android:layout_marginTop="20dp"
+                android:layout_marginTop="16dp"
                 android:text="Start Navigation"
                 android:textAllCaps="false"
                 android:textSize="17sp"
                 android:textStyle="bold"
+                app:backgroundTint="@color/primary_green"
                 app:cornerRadius="16dp"
                 app:icon="@drawable/ic_navigation"
                 app:iconGravity="textStart"

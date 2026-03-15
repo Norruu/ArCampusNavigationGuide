@@ -4,9 +4,43 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/nav_graph"
-    app:startDestination="@id/mapFragment">
+    app:startDestination="@id/onboardingFragment">
 
-    <!-- Map Fragment (Home) -->
+    <!-- 🆕 Onboarding / Splash -->
+    <fragment
+        android:id="@+id/onboardingFragment"
+        android:name="com.campus.arnav.ui.onboarding.OnboardingFragment"
+        android:label="Welcome"
+        tools:layout="@layout/fragment_onboarding">
+
+        <action
+            android:id="@+id/action_onboarding_to_dashboard"
+            app:destination="@id/dashboardFragment"
+            app:popUpTo="@id/onboardingFragment"
+            app:popUpToInclusive="true" />
+    </fragment>
+
+    <!-- 🆕 Dashboard -->
+    <fragment
+        android:id="@+id/dashboardFragment"
+        android:name="com.campus.arnav.ui.dashboard.DashboardFragment"
+        android:label="Dashboard"
+        tools:layout="@layout/fragment_dashboard">
+
+        <action
+            android:id="@+id/action_dashboard_to_map"
+            app:destination="@id/mapFragment" />
+
+        <action
+            android:id="@+id/action_dashboard_to_search"
+            app:destination="@id/searchFragment" />
+
+        <action
+            android:id="@+id/action_dashboard_to_settings"
+            app:destination="@id/settingsFragment" />
+    </fragment>
+
+    <!-- Map Fragment -->
     <fragment
         android:id="@+id/mapFragment"
         android:name="com.campus.arnav.ui.map.MapFragment"
@@ -24,10 +58,21 @@
         <action
             android:id="@+id/action_mapFragment_to_buildingDetailFragment"
             app:destination="@id/buildingDetailFragment" />
+
         <action
             android:id="@+id/action_mapFragment_to_settingsFragment"
             app:destination="@id/settingsFragment" />
 
+        <action
+            android:id="@+id/action_map_to_dashboard"
+            app:destination="@id/dashboardFragment" />
+
+        <!-- 🆕 Accept building ID for navigation -->
+        <argument
+            android:name="navigateToBuildingId"
+            app:argType="string"
+            app:nullable="true"
+            android:defaultValue="@null" />
     </fragment>
 
     <!-- Search Fragment -->
@@ -46,7 +91,6 @@
             app:destination="@id/mapFragment"
             app:popUpTo="@id/mapFragment"
             app:popUpToInclusive="false" />
-
     </fragment>
 
     <!-- Building Detail Fragment -->
@@ -63,7 +107,6 @@
         <action
             android:id="@+id/action_buildingDetailFragment_to_arNavigationFragment"
             app:destination="@id/arNavigationFragment" />
-
     </fragment>
 
     <!-- AR Navigation Fragment -->
@@ -78,7 +121,6 @@
             app:argType="string"
             app:nullable="true"
             android:defaultValue="@null" />
-
     </fragment>
 
     <!-- Settings Fragment -->
