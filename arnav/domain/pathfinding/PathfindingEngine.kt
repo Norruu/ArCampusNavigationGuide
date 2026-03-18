@@ -65,14 +65,14 @@ class PathfindingEngine @Inject constructor() {
             graph.findNearestNode(start)
                 ?: return RouteResult.NoRouteFound("Start location not near campus paths")
         }
+        val endSnapResult = snapToNearestEdge(end, graph)
+        val tempEndId = "temp_end"
 
         // ── End: edge-snap the entrance onto the nearest road ─────────────────
         // 'end' is the building entrance — used as the A* target so routing
         // picks the road segment nearest to the entrance.
         // 'markerDestination' is the building's visual pin position — used only
         // for the final dotted connector so it always points to the marker.
-        val endSnapResult = snapToNearestEdge(end, graph)
-        val tempEndId = "temp_end"
 
         val actualEndNode: CampusGraph.GraphNode = if (endSnapResult != null) {
             val (snappedLoc, nodeAId, nodeBId) = endSnapResult
@@ -97,7 +97,7 @@ class PathfindingEngine @Inject constructor() {
 
             // convertPathToRoute uses markerDestination (building pin) for the
             // final visual connector, not 'end' (entrance used for routing).
-            val route = convertPathToRoute(pathNodes, start, markerDestination)
+            val route = convertPathToRoute(pathNodes, start, markerDestination, options.walkingSpeed)
             RouteResult.Success(route)
         } finally {
             if (startSnapResult != null) graph.removeTemporaryNode(tempStartId)
@@ -211,7 +211,8 @@ class PathfindingEngine @Inject constructor() {
     private fun convertPathToRoute(
         pathNodes: List<CampusGraph.GraphNode>,
         rawOrigin: CampusLocation,
-        rawDestination: CampusLocation   // = building marker pin (visual target)
+        rawDestination: CampusLocation,
+        speedMPS: Double // 🆕 Add this parameter
     ): Route {
         val waypoints = mutableListOf<Waypoint>()
         val steps = mutableListOf<NavigationStep>()
@@ -291,7 +292,7 @@ class PathfindingEngine @Inject constructor() {
             destination   = rawDestination,
             waypoints     = waypoints,
             totalDistance = totalDist,
-            estimatedTime = (totalDist / 1.4).toLong(),
+            estimatedTime = (totalDist / speedMPS).toLong(),
             steps         = steps
         )
     }

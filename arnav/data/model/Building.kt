@@ -23,7 +23,18 @@ enum class BuildingType {
     CAFETERIA,
     SPORTS,
     ADMINISTRATIVE,
-    LANDMARK
+    LANDMARK;
+
+    companion object {
+        fun fromString(value: String): BuildingType {
+            return try {
+                valueOf(value.uppercase())
+            } catch (e: Exception) {
+                // Custom categories default to LANDMARK on the map
+                LANDMARK
+            }
+        }
+    }
 }
 
 @Parcelize

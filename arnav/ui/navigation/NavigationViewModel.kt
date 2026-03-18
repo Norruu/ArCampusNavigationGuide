@@ -7,7 +7,7 @@ import com.campus.arnav.data.model.CampusLocation
 import com.campus.arnav.data.model.Route
 import com.campus.arnav.data.repository.LocationRepository
 import com.campus.arnav.data.repository.NavigationRepository
-import com.campus.arnav.domain.pathfinding.RouteResult // FIXED: Added missing import
+import com.campus.arnav.domain.pathfinding.RouteResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -18,6 +18,12 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+// 1. Define Transport Modes with their respective speeds in meters/second
+enum class TransportMode(val speedMetersPerSecond: Double) {
+    WALKING(1.4),       // ~5 km/h
+    VEHICLE(6.9)        // ~25 km/h (Campus speed limit)
+}
 
 @HiltViewModel
 class NavigationViewModel @Inject constructor(
@@ -49,6 +55,10 @@ class NavigationViewModel @Inject constructor(
     private val _userLocation = MutableStateFlow<CampusLocation?>(null)
     val userLocation: StateFlow<CampusLocation?> = _userLocation.asStateFlow()
 
+    // 2. Track the current transport mode
+    private val _transportMode = MutableStateFlow(TransportMode.WALKING)
+    val transportMode: StateFlow<TransportMode> = _transportMode.asStateFlow()
+
     private var navigationJob: Job? = null
     private var locationTrackingJob: Job? = null
     private var currentStepIndex = 0
@@ -71,6 +81,26 @@ class NavigationViewModel @Inject constructor(
         }
     }
 
+    // 3. Allow UI to change transport mode and immediately update ETA
+    fun setTransportMode(mode: TransportMode) {
+        _transportMode.value = mode
+        val state = _navigationState.value
+
+        // Dynamically update time if currently navigating
+        if (state is NavigationState.Navigating) {
+            val updatedTime = (state.remainingDistance / mode.speedMetersPerSecond).toLong()
+            _navigationState.value = state.copy(remainingTime = updatedTime)
+        }
+        // Or recalculate the base route ETA if in preview mode
+        else if (state is NavigationState.Previewing && state.route != null) {
+            val updatedRoute = state.route.copy(
+                estimatedTime = (state.route.totalDistance / mode.speedMetersPerSecond).toLong()
+            )
+            _route.value = updatedRoute
+            _navigationState.value = state.copy(route = updatedRoute)
+        }
+    }
+
     fun setDestination(building: Building) {
         _destination.value = building
         calculateRoute(building)
@@ -89,24 +119,22 @@ class NavigationViewModel @Inject constructor(
             }
 
             try {
-                // FIXED: Handle RouteResult (Success/Error) instead of checking for null
                 val result = navigationRepository.calculateRoute(currentLocation, building.location)
 
                 when (result) {
                     is RouteResult.Success -> {
-                        val route = result.route
-                        _route.value = route
+                        // Adjust the initial estimated time based on the current transport mode
+                        val adjustedRoute = result.route.copy(
+                            estimatedTime = (result.route.totalDistance / _transportMode.value.speedMetersPerSecond).toLong()
+                        )
+                        _route.value = adjustedRoute
                         _navigationState.value = NavigationState.Previewing(
                             destination = building,
-                            route = route
+                            route = adjustedRoute
                         )
                     }
-                    is RouteResult.Error -> {
-                        _error.value = result.message
-                    }
-                    is RouteResult.NoRouteFound -> {
-                        _error.value = result.message
-                    }
+                    is RouteResult.Error -> _error.value = result.message
+                    is RouteResult.NoRouteFound -> _error.value = result.message
                 }
             } catch (e: Exception) {
                 _error.value = e.message ?: "Unknown error"
@@ -117,11 +145,14 @@ class NavigationViewModel @Inject constructor(
     }
 
     fun selectRoute(route: Route) {
-        _route.value = route
+        val adjustedRoute = route.copy(
+            estimatedTime = (route.totalDistance / _transportMode.value.speedMetersPerSecond).toLong()
+        )
+        _route.value = adjustedRoute
         val dest = _destination.value ?: return
         _navigationState.value = NavigationState.Previewing(
             destination = dest,
-            route = route
+            route = adjustedRoute
         )
     }
 
@@ -137,13 +168,14 @@ class NavigationViewModel @Inject constructor(
             return
         }
 
+        val remainingDist = currentRoute.totalDistance
         _navigationState.value = NavigationState.Navigating(
             route = currentRoute,
             currentStep = firstStep,
             currentStepIndex = 0,
             distanceToNextWaypoint = calculateDistanceToWaypoint(0),
-            remainingDistance = currentRoute.totalDistance,
-            remainingTime = currentRoute.estimatedTime
+            remainingDistance = remainingDist,
+            remainingTime = (remainingDist / _transportMode.value.speedMetersPerSecond).toLong() // Use dynamic speed
         )
 
         viewModelScope.launch {
@@ -162,7 +194,8 @@ class NavigationViewModel @Inject constructor(
                 onWaypointReached(state)
             } else {
                 val remainingDistance = calculateRemainingDistance(location, currentStepIndex)
-                val remainingTime = (remainingDistance / 1.4).toLong()
+                // 4. Use the dynamic speed based on selected Transport Mode
+                val remainingTime = (remainingDistance / _transportMode.value.speedMetersPerSecond).toLong()
 
                 _navigationState.value = state.copy(
                     distanceToNextWaypoint = distanceToWaypoint,
@@ -192,7 +225,8 @@ class NavigationViewModel @Inject constructor(
         val nextStep = route.steps.getOrNull(currentStepIndex) ?: return
         val distanceToNext = calculateDistanceToWaypoint(currentStepIndex)
         val remainingDistance = calculateRemainingDistance(_userLocation.value, currentStepIndex)
-        val remainingTime = (remainingDistance / 1.4).toLong()
+        // 5. Use the dynamic speed based on selected Transport Mode
+        val remainingTime = (remainingDistance / _transportMode.value.speedMetersPerSecond).toLong()
 
         _navigationState.value = state.copy(
             currentStep = nextStep,
@@ -209,21 +243,15 @@ class NavigationViewModel @Inject constructor(
 
     private fun onArrived() {
         val dest = _destination.value ?: return
-
         _navigationState.value = NavigationState.Arrived(dest)
-
-        viewModelScope.launch {
-            _uiEvent.emit(NavigationUiEvent.Arrived)
-        }
+        viewModelScope.launch { _uiEvent.emit(NavigationUiEvent.Arrived) }
     }
 
     private fun isOffRoute(location: CampusLocation): Boolean {
         val route = _route.value ?: return false
-
         val minDistance = route.waypoints.minOfOrNull { waypoint ->
             calculateDistance(location, waypoint.location)
         } ?: return false
-
         return minDistance > 30.0
     }
 
@@ -263,17 +291,21 @@ class NavigationViewModel @Inject constructor(
         return calculateDistance(location, waypoint.location)
     }
 
+    // 6. Ensure distance follows the path of connected nodes
     private fun calculateRemainingDistance(location: CampusLocation?, fromStepIndex: Int): Double {
         if (location == null) return 0.0
         val route = _route.value ?: return 0.0
 
         var distance = 0.0
 
+        // Distance from current GPS location to the upcoming node/waypoint
         val nextWaypoint = route.waypoints.getOrNull(fromStepIndex + 1)
         if (nextWaypoint != null) {
             distance += calculateDistance(location, nextWaypoint.location)
         }
 
+        // Add the exact distance of all remaining steps (following the A* connected nodes)
+        // rather than taking a straight-line displacement to the destination.
         for (i in (fromStepIndex + 1) until route.steps.size) {
             distance += route.steps[i].distance
         }

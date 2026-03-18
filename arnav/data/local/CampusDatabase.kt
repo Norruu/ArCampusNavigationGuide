@@ -16,7 +16,7 @@ import com.campus.arnav.data.local.entity.WaypointEntity
         WaypointEntity::class,
         NavigationStepEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class CampusDatabase : RoomDatabase() {

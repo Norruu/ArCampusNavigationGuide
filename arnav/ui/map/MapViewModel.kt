@@ -9,11 +9,12 @@ import com.campus.arnav.data.model.Route
 import com.campus.arnav.data.model.BuildingType
 import com.campus.arnav.data.model.Waypoint
 import com.campus.arnav.data.model.WaypointType
-import com.campus.arnav.data.model.NavigationStep // <-- Fixed the import here!
+import com.campus.arnav.data.model.NavigationStep
 import com.campus.arnav.data.repository.CampusRepository
 import com.campus.arnav.data.repository.LocationRepository
 import com.campus.arnav.data.repository.NavigationRepository
 import com.campus.arnav.domain.pathfinding.CampusPathfinding
+import com.campus.arnav.domain.pathfinding.RouteOptions
 import com.campus.arnav.domain.pathfinding.RouteResult
 import com.campus.arnav.ui.navigation.NavigationState
 import com.campus.arnav.util.NavigationFeedbackManager
@@ -30,6 +31,12 @@ import kotlinx.coroutines.launch
 import org.osmdroid.util.GeoPoint
 import javax.inject.Inject
 import kotlin.math.*
+
+// 1. Define Transport Modes
+enum class TransportMode(val speedMetersPerSecond: Double) {
+    WALKING(1.4),       // ~5 km/h
+    VEHICLE(6.9)        // ~25 km/h
+}
 
 @HiltViewModel
 class MapViewModel @Inject constructor(
@@ -78,6 +85,10 @@ class MapViewModel @Inject constructor(
     private val _isCompassMode = MutableStateFlow(false)
     val isCompassMode: StateFlow<Boolean> = _isCompassMode.asStateFlow()
 
+    // 2. Track Current Transport Mode
+    private val _transportMode = MutableStateFlow(TransportMode.WALKING)
+    val transportMode: StateFlow<TransportMode> = _transportMode.asStateFlow()
+
     private val _isPathfindingReady = MutableStateFlow(false)
     private val _useSmartPathfinding = MutableStateFlow(true)
 
@@ -101,6 +112,29 @@ class MapViewModel @Inject constructor(
         loadBuildings()
         startLocationUpdates()
         initializePathfinding()
+    }
+
+    // 3. Update Time when Transport Mode Changes
+    fun setTransportMode(mode: TransportMode) {
+        _transportMode.value = mode
+        val currentRoute = _activeRoute.value ?: return
+
+        // Update the active route's time
+        val updatedTime = (currentRoute.totalDistance / mode.speedMetersPerSecond).toLong()
+        val updatedRoute = currentRoute.copy(estimatedTime = updatedTime)
+        _activeRoute.value = updatedRoute
+
+        // Update active navigation remaining time
+        val state = _navigationState.value
+        if (state is NavigationState.Navigating) {
+            val newRemainingTime = (state.remainingDistance / mode.speedMetersPerSecond).toLong()
+            _navigationState.value = state.copy(
+                route = updatedRoute,
+                remainingTime = newRemainingTime
+            )
+        } else if (state is NavigationState.Previewing) {
+            _navigationState.value = state.copy(route = updatedRoute)
+        }
     }
 
     private fun initializePathfinding() {
@@ -233,11 +267,10 @@ class MapViewModel @Inject constructor(
 
     private fun createDirectDisplacementRoute(start: CampusLocation, building: Building, distance: Double) {
         try {
-            // FIX: Using proper WaypointType enums
+            val speed = _transportMode.value.speedMetersPerSecond
             val startWaypoint = Waypoint(location = start, type = WaypointType.START)
-            val endWaypoint = Waypoint(location = building.location, type = WaypointType.END) // Changed to END
+            val endWaypoint = Waypoint(location = building.location, type = WaypointType.END)
 
-            // FIX: Using NavigationStep and providing all required variables
             val directStep = NavigationStep(
                 instruction = "Walk directly to ${building.name}",
                 distance = distance,
@@ -253,7 +286,7 @@ class MapViewModel @Inject constructor(
                 waypoints = listOf(startWaypoint, endWaypoint),
                 steps = listOf(directStep),
                 totalDistance = distance,
-                estimatedTime = (distance / 1.4).toLong()
+                estimatedTime = (distance / speed).toLong() // 4. Use speed here
             )
 
             handleRouteSuccess(directRoute, building)
@@ -266,7 +299,10 @@ class MapViewModel @Inject constructor(
         val start = GeoPoint(currentLocation.latitude, currentLocation.longitude)
         val target = GeoPoint(building.location.latitude, building.location.longitude)
 
-        when (val routeResult = campusPathfinding.findRoute(start, target, target)) {
+        // 5. Pass correct options to pathfinding
+        val options = RouteOptions(walkingSpeed = _transportMode.value.speedMetersPerSecond)
+
+        when (val routeResult = campusPathfinding.findRoute(start, target, target, options)) {
             is RouteResult.Success -> handleRouteSuccess(routeResult.route, building)
             is RouteResult.NoRouteFound -> calculateSimpleRoute(currentLocation, building)
             is RouteResult.Error -> {
@@ -291,7 +327,12 @@ class MapViewModel @Inject constructor(
     }
 
     private fun handleRouteSuccess(route: Route, building: Building) {
-        val improvedRoute = generateRouteInstructions(route)
+        val speed = _transportMode.value.speedMetersPerSecond
+        val adjustedRoute = route.copy(
+            estimatedTime = (route.totalDistance / speed).toLong()
+        )
+
+        val improvedRoute = generateRouteInstructions(adjustedRoute)
         _activeRoute.value = improvedRoute
 
         val allPoints = improvedRoute.waypoints.map {
@@ -385,6 +426,7 @@ class MapViewModel @Inject constructor(
 
     private fun updateNavigationProgress(location: CampusLocation, state: NavigationState.Navigating) {
         val route = state.route
+        val speed = _transportMode.value.speedMetersPerSecond
 
         val finalDestination = route.waypoints.lastOrNull()?.location
         val distanceToFinish = if (finalDestination != null) calculateDistance(location, finalDestination) else 0.0
@@ -400,11 +442,9 @@ class MapViewModel @Inject constructor(
             val building = _selectedBuilding.value
             if (building != null) {
 
-                // FIX: Using proper WaypointType enums
                 val startWaypoint = Waypoint(location = location, type = WaypointType.START)
-                val endWaypoint = Waypoint(location = building.location, type = WaypointType.END) // Changed to END
+                val endWaypoint = Waypoint(location = building.location, type = WaypointType.END)
 
-                // FIX: Using NavigationStep and providing all required variables
                 val directStep = NavigationStep(
                     instruction = "Walk directly to ${building.name}",
                     distance = distanceToFinish,
@@ -420,7 +460,7 @@ class MapViewModel @Inject constructor(
                     waypoints = listOf(startWaypoint, endWaypoint),
                     steps = listOf(directStep),
                     totalDistance = distanceToFinish,
-                    estimatedTime = (distanceToFinish / 1.4).toLong()
+                    estimatedTime = (distanceToFinish / speed).toLong()
                 )
 
                 _routePoints.value = listOf(
@@ -434,7 +474,8 @@ class MapViewModel @Inject constructor(
                     currentStep = directStep,
                     currentStepIndex = 0,
                     distanceToNextWaypoint = distanceToFinish,
-                    remainingDistance = distanceToFinish
+                    remainingDistance = distanceToFinish,
+                    remainingTime = directRoute.estimatedTime
                 )
                 return
             }
@@ -453,7 +494,8 @@ class MapViewModel @Inject constructor(
             } else {
                 _navigationState.value = state.copy(
                     distanceToNextWaypoint = distToNext,
-                    remainingDistance = distanceToFinish
+                    remainingDistance = distanceToFinish,
+                    remainingTime = (distanceToFinish / speed).toLong()
                 )
             }
         }

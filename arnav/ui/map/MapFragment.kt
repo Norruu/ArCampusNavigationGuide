@@ -4,6 +4,7 @@ import android.Manifest
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
@@ -13,12 +14,18 @@ import android.graphics.Paint
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.text.Editable
+import org.osmdroid.views.overlay.Polygon
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
+import android.view.inputmethod.InputMethodManager
 import android.widget.Button
+import android.widget.EditText
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,6 +35,9 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.setFragmentResultListener
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.fragment.findNavController
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.campus.arnav.R
 import com.campus.arnav.data.model.Building
 import com.campus.arnav.data.model.BuildingType
@@ -42,7 +52,9 @@ import com.campus.arnav.ui.map.components.CustomMarkerOverlay
 import com.campus.arnav.ui.map.components.DestinationConnectorOverlay
 import com.campus.arnav.ui.map.components.OffRoutePolyline
 import com.campus.arnav.ui.navigation.NavigationState
+import com.campus.arnav.util.FirestoreSyncManager
 import com.campus.arnav.util.MapCompassManager
+import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import dagger.hilt.android.AndroidEntryPoint
@@ -57,9 +69,11 @@ import org.osmdroid.util.GeoPoint
 import org.osmdroid.util.MapTileIndex
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MapFragment : Fragment() {
@@ -69,11 +83,15 @@ class MapFragment : Fragment() {
 
     private val viewModel: MapViewModel by viewModels()
 
+    @Inject lateinit var firestoreSyncManager: FirestoreSyncManager
+
     private lateinit var mapView: MapView
     private var myLocationOverlay: MyLocationNewOverlay? = null
     private lateinit var routePolyline: Polyline
 
     private val buildingMarkers = mutableListOf<CustomMarkerOverlay>()
+    private val poiMarkers = mutableListOf<Marker>()
+    private val geofencePolygons = mutableListOf<Polygon>()
     private lateinit var campusPathsOverlay: CampusPathsOverlay
 
     private var isDarkMode = false
@@ -87,6 +105,18 @@ class MapFragment : Fragment() {
     // Polyline overlays
     private val offRoutePolyline = OffRoutePolyline()
     private val destinationConnectorOverlay = DestinationConnectorOverlay()
+
+    private var isWalkingMode = true
+
+    // Search
+    private var etMapSearch: EditText? = null
+    private var btnMapClear: ImageView? = null
+    private var searchDropdown: MaterialCardView? = null
+    private var rvMapSearchResults: RecyclerView? = null
+    private lateinit var mapSearchAdapter: MapSearchAdapter
+    private var allBuildingsForSearch: List<Building> = emptyList()
+
+    private val roadPolylines = mutableListOf<Polyline>()
 
     private val mainActivity get() = activity as? MainActivity
 
@@ -111,6 +141,8 @@ class MapFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        mainActivity?.setBottomNavVisibility(false)
+
         configureOSMDroid()
         campusPathsOverlay = CampusPathsOverlay()
         mapCompassManager = MapCompassManager(requireContext())
@@ -128,10 +160,138 @@ class MapFragment : Fragment() {
         setupUI()
         observeViewModel()
 
+        // Setup map search
+        etMapSearch = view.findViewById(R.id.etMapSearch)
+        btnMapClear = view.findViewById(R.id.btnMapClearSearch)
+        searchDropdown = view.findViewById(R.id.searchDropdown)
+        rvMapSearchResults = view.findViewById(R.id.rvMapSearchResults)
+        setupMapSearch()
+
+        loadFirestoreMarkers()
+        loadFirestoreGeofences()
+
+        handleNavigationFromDashboard()
+
         setFragmentResultListener("search_request") { _, bundle ->
             val buildingId = bundle.getString("building_id")
             if (buildingId != null) viewModel.selectBuildingById(buildingId)
         }
+    }
+
+    private fun handleNavigationFromDashboard() {
+        val buildingId = arguments?.getString("navigateToBuildingId")
+        if (buildingId != null) {
+            viewModel.selectBuildingById(buildingId)
+
+            viewLifecycleOwner.lifecycleScope.launch {
+                delay(1500)
+                val buildings = viewModel.buildings.value
+                val building = buildings.find { it.id == buildingId }
+                if (building != null) {
+                    val geoPoint = GeoPoint(building.location.latitude, building.location.longitude)
+                    mapView.controller.animateTo(geoPoint, 18.5, 1500L)
+                }
+            }
+
+            arguments?.remove("navigateToBuildingId")
+        }
+    }
+
+    // ===== MAP SEARCH =====
+    private fun setupMapSearch() {
+        mapSearchAdapter = MapSearchAdapter { building ->
+            // Close search
+            etMapSearch?.text?.clear()
+            etMapSearch?.clearFocus()
+            searchDropdown?.visibility = View.GONE
+            btnMapClear?.visibility = View.GONE
+            hideMapKeyboard()
+
+            // Show all markers again
+            showAllBuildingMarkers()
+
+            // Select and navigate to the building
+            viewModel.onBuildingSelected(building)
+
+            // Zoom to it
+            val geoPoint = GeoPoint(building.location.latitude, building.location.longitude)
+            mapView.controller.animateTo(geoPoint, 18.5, 1500L)
+        }
+
+        rvMapSearchResults?.layoutManager = LinearLayoutManager(requireContext())
+        rvMapSearchResults?.adapter = mapSearchAdapter
+
+        etMapSearch?.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                val query = s.toString().trim()
+                if (query.isNotEmpty()) {
+                    btnMapClear?.visibility = View.VISIBLE
+                    val filtered = allBuildingsForSearch.filter {
+                        it.name.contains(query, ignoreCase = true) ||
+                                it.shortName.contains(query, ignoreCase = true) ||
+                                (it.description?.contains(query, ignoreCase = true) == true)
+                    }
+                    mapSearchAdapter.submitList(filtered)
+                    searchDropdown?.visibility = if (filtered.isNotEmpty()) View.VISIBLE else View.GONE
+
+                    // Filter markers on map
+                    filterBuildingMarkers(filtered)
+                } else {
+                    btnMapClear?.visibility = View.GONE
+                    mapSearchAdapter.submitList(emptyList())
+                    searchDropdown?.visibility = View.GONE
+
+                    // Show all markers
+                    showAllBuildingMarkers()
+                }
+            }
+        })
+
+        btnMapClear?.setOnClickListener {
+            etMapSearch?.text?.clear()
+            etMapSearch?.clearFocus()
+            searchDropdown?.visibility = View.GONE
+            btnMapClear?.visibility = View.GONE
+            hideMapKeyboard()
+            showAllBuildingMarkers()
+        }
+
+        // Cache buildings for search
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewModel.buildings.collectLatest { buildings ->
+                allBuildingsForSearch = buildings
+            }
+        }
+    }
+
+    private fun filterBuildingMarkers(filtered: List<Building>) {
+        buildingMarkers.forEach { marker ->
+            val matches = filtered.any { it.id == marker.building.id }
+            if (matches) {
+                if (!mapView.overlays.contains(marker)) {
+                    mapView.overlays.add(marker)
+                }
+            } else {
+                mapView.overlays.remove(marker)
+            }
+        }
+        mapView.invalidate()
+    }
+
+    private fun showAllBuildingMarkers() {
+        buildingMarkers.forEach { marker ->
+            if (!mapView.overlays.contains(marker)) {
+                mapView.overlays.add(marker)
+            }
+        }
+        mapView.invalidate()
+    }
+
+    private fun hideMapKeyboard() {
+        val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(etMapSearch?.windowToken, 0)
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -140,6 +300,18 @@ class MapFragment : Fragment() {
 
         binding.navigationPanel.root.visibility = View.GONE
         setupActivePanelDrag()
+
+        binding.fabSettings.setOnClickListener {
+            findNavController().navigate(R.id.action_mapFragment_to_settingsFragment)
+        }
+
+        binding.fabSatellite.setOnClickListener {
+            toggleMapLayer()
+        }
+
+        binding.fabToggleDashboard.setOnClickListener {
+            findNavController().navigate(R.id.action_map_to_dashboard)
+        }
 
         binding.fabRecenter.setOnClickListener {
             myLocationOverlay?.myLocation?.let { location ->
@@ -166,6 +338,78 @@ class MapFragment : Fragment() {
 
         binding.navigationPanel.btnClosePanel.setOnClickListener { viewModel.stopNavigation() }
         binding.activeNavigationPanel.btnEndNavigation.setOnClickListener { viewModel.stopNavigation() }
+
+        setupTransportToggle()
+    }
+
+    private fun setupTransportToggle() {
+        binding.navigationPanel.btnWalking.setOnClickListener {
+            if (!isWalkingMode) {
+                isWalkingMode = true
+                updateTransportUI()
+
+                // 1. Send the mode selection to the ViewModel
+                viewModel.setTransportMode(TransportMode.WALKING)
+            }
+        }
+
+        binding.navigationPanel.btnVehicle.setOnClickListener {
+            if (isWalkingMode) {
+                isWalkingMode = false
+                updateTransportUI()
+
+                // 2. Send the mode selection to the ViewModel
+                viewModel.setTransportMode(TransportMode.VEHICLE)
+            }
+        }
+    }
+
+    private fun updateTransportUI() {
+        val primaryGreen = ContextCompat.getColor(requireContext(), R.color.primary_green)
+        val white = Color.WHITE
+        val transparent = Color.TRANSPARENT
+
+        // Convert 2dp to pixels for border width
+        val strokeWidthPx = (2 * resources.displayMetrics.density).toInt()
+
+        if (isWalkingMode) {
+            // WALKING ACTIVE
+            binding.navigationPanel.btnWalking.backgroundTintList = ColorStateList.valueOf(primaryGreen)
+            binding.navigationPanel.btnWalking.setTextColor(white)
+            binding.navigationPanel.btnWalking.iconTint = ColorStateList.valueOf(white)
+            binding.navigationPanel.btnWalking.strokeWidth = 0
+
+            // VEHICLE INACTIVE
+            binding.navigationPanel.btnVehicle.backgroundTintList = ColorStateList.valueOf(transparent)
+            binding.navigationPanel.btnVehicle.setTextColor(primaryGreen)
+            binding.navigationPanel.btnVehicle.iconTint = ColorStateList.valueOf(primaryGreen)
+            binding.navigationPanel.btnVehicle.strokeColor = ColorStateList.valueOf(primaryGreen)
+            binding.navigationPanel.btnVehicle.strokeWidth = strokeWidthPx
+
+            routePolyline.outlinePaint.apply {
+                strokeWidth = 16f
+                pathEffect = null
+            }
+        } else {
+            // VEHICLE ACTIVE
+            binding.navigationPanel.btnVehicle.backgroundTintList = ColorStateList.valueOf(primaryGreen)
+            binding.navigationPanel.btnVehicle.setTextColor(white)
+            binding.navigationPanel.btnVehicle.iconTint = ColorStateList.valueOf(white)
+            binding.navigationPanel.btnVehicle.strokeWidth = 0
+
+            // WALKING INACTIVE
+            binding.navigationPanel.btnWalking.backgroundTintList = ColorStateList.valueOf(transparent)
+            binding.navigationPanel.btnWalking.setTextColor(primaryGreen)
+            binding.navigationPanel.btnWalking.iconTint = ColorStateList.valueOf(primaryGreen)
+            binding.navigationPanel.btnWalking.strokeColor = ColorStateList.valueOf(primaryGreen)
+            binding.navigationPanel.btnWalking.strokeWidth = strokeWidthPx
+
+            routePolyline.outlinePaint.apply {
+                strokeWidth = 22f
+                pathEffect = android.graphics.DashPathEffect(floatArrayOf(30f, 15f), 0f)
+            }
+        }
+        mapView.invalidate()
     }
 
     private fun setupCategories() {
@@ -174,7 +418,7 @@ class MapFragment : Fragment() {
 
         val bgStates = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
         val bgColors = intArrayOf(
-            ContextCompat.getColor(requireContext(), R.color.map_blue),
+            ContextCompat.getColor(requireContext(), R.color.primary_green),
             Color.parseColor("#F0F0F0")
         )
         val chipBackgroundColor = ColorStateList(bgStates, bgColors)
@@ -195,7 +439,10 @@ class MapFragment : Fragment() {
         allChip.text = "All"
         applyStyle(allChip)
         allChip.isChecked = true
-        allChip.setOnClickListener { viewModel.filterBuildingsByCategory(null) }
+        allChip.setOnClickListener {
+            viewModel.filterBuildingsByCategory(null)
+            showAllMarkers()
+        }
         chipGroup.addView(allChip)
 
         BuildingType.values().forEach { type ->
@@ -206,9 +453,246 @@ class MapFragment : Fragment() {
             chip.chipIcon = ContextCompat.getDrawable(requireContext(), getIconForBuildingType(type))
             chip.isChipIconVisible = true
             applyStyle(chip)
-            chip.setOnClickListener { viewModel.filterBuildingsByCategory(type) }
+            chip.setOnClickListener {
+                viewModel.filterBuildingsByCategory(type)
+                showAllMarkers()
+            }
             chipGroup.addView(chip)
         }
+
+        loadCategoryChips(chipGroup, chipBackgroundColor, contentColorStateList)
+    }
+
+    private fun loadCategoryChips(
+        chipGroup: com.google.android.material.chip.ChipGroup,
+        chipBackgroundColor: ColorStateList,
+        contentColorStateList: ColorStateList
+    ) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            delay(2500)
+            addCategoryChips(chipGroup, chipBackgroundColor, contentColorStateList)
+        }
+    }
+
+    private fun addCategoryChips(
+        chipGroup: com.google.android.material.chip.ChipGroup,
+        chipBackgroundColor: ColorStateList,
+        contentColorStateList: ColorStateList
+    ) {
+        val categories = firestoreSyncManager.cachedCategories
+        if (categories.isEmpty()) return
+
+        categories.forEach { category ->
+            val alreadyExists = (0 until chipGroup.childCount).any { i ->
+                (chipGroup.getChildAt(i) as? com.google.android.material.chip.Chip)?.text == category.name
+            }
+            if (alreadyExists) return@forEach
+
+            val chip = com.google.android.material.chip.Chip(
+                requireContext(), null, com.google.android.material.R.style.Widget_Material3_Chip_Filter
+            )
+            chip.text = category.name
+            chip.isCheckable = true
+            chip.isCheckedIconVisible = false
+            chip.chipBackgroundColor = chipBackgroundColor
+            chip.setTextColor(contentColorStateList)
+            chip.setOnClickListener { filterMarkersByCategory(category.id) }
+            chipGroup.addView(chip)
+        }
+    }
+
+    private fun filterMarkersByCategory(categoryId: String) {
+        val allMarkers = firestoreSyncManager.cachedMarkers
+        poiMarkers.forEach { mapView.overlays.remove(it) }
+        poiMarkers.clear()
+
+        val filtered = allMarkers.filter { it.categoryId == categoryId }
+        filtered.forEach { firestoreMarker ->
+            val marker = Marker(mapView)
+            marker.position = GeoPoint(firestoreMarker.latitude, firestoreMarker.longitude)
+            marker.title = firestoreMarker.title
+            marker.snippet = firestoreMarker.description
+            marker.icon = ContextCompat.getDrawable(requireContext(), getIconForMarkerType(firestoreMarker.iconType))
+            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+            marker.setOnMarkerClickListener { m, _ ->
+                Toast.makeText(requireContext(), "${m.title}\n${m.snippet ?: ""}", Toast.LENGTH_LONG).show()
+                true
+            }
+            poiMarkers.add(marker)
+            mapView.overlays.add(marker)
+        }
+        viewModel.filterBuildingsByCategory(null)
+        mapView.invalidate()
+    }
+
+    private fun showAllMarkers() {
+        poiMarkers.forEach { mapView.overlays.remove(it) }
+        poiMarkers.clear()
+
+        val allMarkers = firestoreSyncManager.cachedMarkers
+        val categories = firestoreSyncManager.cachedCategories
+
+        allMarkers.forEach { firestoreMarker ->
+            val marker = Marker(mapView)
+            marker.position = GeoPoint(firestoreMarker.latitude, firestoreMarker.longitude)
+            marker.title = firestoreMarker.title
+            marker.snippet = firestoreMarker.description
+            val category = categories.find { it.id == firestoreMarker.categoryId }
+            marker.icon = ContextCompat.getDrawable(requireContext(), getIconForMarkerType(firestoreMarker.iconType))
+            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+            marker.setOnMarkerClickListener { m, _ ->
+                val categoryName = category?.name ?: ""
+                val info = if (categoryName.isNotEmpty()) "$categoryName\n${m.snippet ?: ""}" else (m.snippet ?: "")
+                Toast.makeText(requireContext(), "${m.title}\n$info", Toast.LENGTH_LONG).show()
+                true
+            }
+            poiMarkers.add(marker)
+            mapView.overlays.add(marker)
+        }
+        mapView.invalidate()
+    }
+
+    private fun loadFirestoreMarkers() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            delay(2000)
+            updatePOIMarkers()
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            while (true) {
+                delay(5000)
+                updatePOIMarkers()
+            }
+        }
+    }
+
+    private fun updatePOIMarkers() {
+        val markers = firestoreSyncManager.cachedMarkers
+        val categories = firestoreSyncManager.cachedCategories
+        if (markers.size == poiMarkers.size && markers.isNotEmpty()) return
+
+        poiMarkers.forEach { mapView.overlays.remove(it) }
+        poiMarkers.clear()
+
+        markers.forEach { firestoreMarker ->
+            val marker = Marker(mapView)
+            marker.position = GeoPoint(firestoreMarker.latitude, firestoreMarker.longitude)
+            marker.title = firestoreMarker.title
+            marker.snippet = firestoreMarker.description
+            val category = categories.find { it.id == firestoreMarker.categoryId }
+            marker.icon = ContextCompat.getDrawable(requireContext(), getIconForMarkerType(firestoreMarker.iconType))
+            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+            marker.setOnMarkerClickListener { m, _ ->
+                val title = m.title ?: "Marker"
+                val desc = m.snippet ?: ""
+                val categoryName = category?.name ?: ""
+                val info = if (categoryName.isNotEmpty()) "$categoryName\n$desc" else desc
+                Toast.makeText(requireContext(), "$title\n$info", Toast.LENGTH_LONG).show()
+                true
+            }
+            poiMarkers.add(marker)
+            mapView.overlays.add(marker)
+        }
+        mapView.invalidate()
+        if (markers.isNotEmpty()) {
+            android.util.Log.d("MapFragment", "Added ${markers.size} POI markers to map")
+        }
+    }
+
+    private fun loadFirestoreGeofences() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            delay(2500)
+            updateGeofencePolygons()
+            updateRoads()
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            while (true) {
+                delay(5000)
+                updateGeofencePolygons()
+                updateRoads()
+            }
+        }
+    }
+
+    private fun updateGeofencePolygons() {
+        val geofences = firestoreSyncManager.cachedGeofences
+        if (geofences.size == geofencePolygons.size && geofences.isNotEmpty()) return
+
+        geofencePolygons.forEach { mapView.overlays.remove(it) }
+        geofencePolygons.clear()
+
+        geofences.forEach { geofence ->
+            val polygonOverlay = Polygon(mapView).apply {
+                // If the admin created a polygon, draw it. Otherwise, fallback to the old circle.
+                if (!geofence.polygonPoints.isNullOrEmpty()) {
+                    val pts = geofence.polygonPoints.map {
+                        GeoPoint(it["lat"] ?: 0.0, it["lng"] ?: 0.0)
+                    }
+                    points = pts
+                } else {
+                    val center = GeoPoint(geofence.latitude, geofence.longitude)
+                    points = createCirclePoints(center, geofence.radius)
+                }
+
+                // Match the translucent green fill from the admin panel
+                fillPaint.color = Color.argb(80, 45, 106, 79)
+                outlinePaint.color = Color.argb(255, 45, 106, 79)
+                outlinePaint.strokeWidth = 3f
+                outlinePaint.isAntiAlias = true
+            }
+            geofencePolygons.add(polygonOverlay)
+            mapView.overlays.add(polygonOverlay)
+        }
+
+        // Ensure the user's location dot stays on top of the geofence colors
+        myLocationOverlay?.let {
+            mapView.overlays.remove(it)
+            mapView.overlays.add(it)
+        }
+
+        mapView.invalidate()
+        if (geofences.isNotEmpty()) {
+            android.util.Log.d("MapFragment", "Added ${geofences.size} geofence polygons to map")
+        }
+    }
+
+    private fun createCirclePoints(center: GeoPoint, radiusMeters: Double): List<GeoPoint> {
+        val points = mutableListOf<GeoPoint>()
+        val earthRadius = 6371000.0
+        for (i in 0..360 step 5) {
+            val angle = Math.toRadians(i.toDouble())
+            val lat = Math.asin(
+                Math.sin(Math.toRadians(center.latitude)) * Math.cos(radiusMeters / earthRadius) +
+                        Math.cos(Math.toRadians(center.latitude)) * Math.sin(radiusMeters / earthRadius) * Math.cos(angle)
+            )
+            val lon = Math.toRadians(center.longitude) + Math.atan2(
+                Math.sin(angle) * Math.sin(radiusMeters / earthRadius) * Math.cos(Math.toRadians(center.latitude)),
+                Math.cos(radiusMeters / earthRadius) - Math.sin(Math.toRadians(center.latitude)) * Math.sin(lat)
+            )
+            points.add(GeoPoint(Math.toDegrees(lat), Math.toDegrees(lon)))
+        }
+        return points
+    }
+
+    private fun updateRoads() {
+        val roads = firestoreSyncManager.cachedRoads
+
+        roadPolylines.forEach { mapView.overlays.remove(it) }
+        roadPolylines.clear()
+
+        roads.forEach { road ->
+            if (road.roadNodes.isNotEmpty()) {
+                val polyline = Polyline(mapView).apply {
+                    outlinePaint.color = Color.parseColor("#42B89F") // Admin Theme Green
+                    outlinePaint.strokeWidth = 10f
+                    outlinePaint.strokeCap = Paint.Cap.ROUND
+                    outlinePaint.strokeJoin = Paint.Join.ROUND
+                    setPoints(road.roadNodes.map { GeoPoint(it["lat"] ?: 0.0, it["lng"] ?: 0.0) })
+                }
+                roadPolylines.add(polyline)
+                mapView.overlays.add(0, polyline) // Draw at bottom layer
+            }
+        }
+        mapView.invalidate()
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -325,7 +809,8 @@ class MapFragment : Fragment() {
                 binding.activeNavigationPanel.root.visibility = View.GONE
                 binding.categoryContainer.visibility = View.VISIBLE
                 binding.fabArMode.visibility = View.GONE
-                mainActivity?.setBottomNavVisibility(true)
+                binding.fabToggleDashboard.visibility = View.VISIBLE
+                binding.fabSatellite.visibility = View.VISIBLE
                 clearRoute()
                 stopNavigationService()
             }
@@ -334,7 +819,8 @@ class MapFragment : Fragment() {
                 binding.activeNavigationPanel.root.visibility = View.GONE
                 binding.categoryContainer.visibility = View.VISIBLE
                 binding.fabArMode.visibility = View.GONE
-                mainActivity?.setBottomNavVisibility(true)
+                binding.fabToggleDashboard.visibility = View.GONE
+                binding.fabSatellite.visibility = View.VISIBLE
 
                 binding.navigationPanel.tvDestinationName.text = state.destination.name
                 binding.navigationPanel.tvDestinationDescription.text = state.destination.description ?: ""
@@ -352,7 +838,8 @@ class MapFragment : Fragment() {
                 binding.activeNavigationPanel.root.visibility = View.VISIBLE
                 binding.categoryContainer.visibility = View.GONE
                 binding.fabArMode.visibility = View.VISIBLE
-                mainActivity?.setBottomNavVisibility(false)
+                binding.fabToggleDashboard.visibility = View.GONE
+                binding.fabSatellite.visibility = View.GONE
 
                 binding.activeNavigationPanel.infoContainer.visibility = View.VISIBLE
                 displayRoute(state.route)
@@ -363,7 +850,8 @@ class MapFragment : Fragment() {
                 binding.activeNavigationPanel.root.visibility = View.GONE
                 binding.categoryContainer.visibility = View.GONE
                 binding.fabArMode.visibility = View.GONE
-                mainActivity?.setBottomNavVisibility(true)
+                binding.fabToggleDashboard.visibility = View.VISIBLE
+                binding.fabSatellite.visibility = View.VISIBLE
                 clearRoute()
                 stopNavigationService()
             }
@@ -444,8 +932,8 @@ class MapFragment : Fragment() {
         }
 
         routePolyline = Polyline(mapView).apply {
-            outlinePaint.color = ContextCompat.getColor(requireContext(), R.color.route_blue)
-            outlinePaint.strokeWidth = 20f
+            outlinePaint.color = ContextCompat.getColor(requireContext(), R.color.primary_green)
+            outlinePaint.strokeWidth = 16f
             outlinePaint.strokeCap = Paint.Cap.ROUND
             outlinePaint.strokeJoin = Paint.Join.ROUND
             outlinePaint.isAntiAlias = true
@@ -520,7 +1008,6 @@ class MapFragment : Fragment() {
 
     private fun updateNavigationService(instruction: String, distance: String, directionCode: String) {
         if (!Settings.canDrawOverlays(requireContext())) return
-
         val intent = Intent(requireContext(), NavigationService::class.java).apply {
             action = NavigationService.ACTION_UPDATE
             putExtra(NavigationService.EXTRA_INSTRUCTION, instruction)
@@ -530,7 +1017,6 @@ class MapFragment : Fragment() {
         ContextCompat.startForegroundService(requireContext(), intent)
     }
 
-    // --- CRITICAL FIX: Cleanly stop the service using stopService() to prevent Android 8+ crashes ---
     private fun stopNavigationService() {
         val intent = Intent(requireContext(), NavigationService::class.java)
         requireContext().stopService(intent)
@@ -553,31 +1039,6 @@ class MapFragment : Fragment() {
             mapView.overlays.add(marker)
         }
         mapView.invalidate()
-    }
-
-    private fun getDirectionIcon(direction: Direction): Int {
-        return when (direction) {
-            Direction.FORWARD -> R.drawable.ic_arrow_up
-            Direction.LEFT -> R.drawable.ic_turn_left
-            Direction.SLIGHT_LEFT -> R.drawable.ic_turn_slight_left
-            Direction.SHARP_LEFT -> R.drawable.ic_turn_sharp_left
-            Direction.RIGHT -> R.drawable.ic_turn_right
-            Direction.SLIGHT_RIGHT -> R.drawable.ic_turn_slight_right
-            Direction.SHARP_RIGHT -> R.drawable.ic_turn_sharp_right
-            Direction.U_TURN -> R.drawable.ic_u_turn
-            Direction.ARRIVE -> R.drawable.ic_destination
-        }
-    }
-
-    private fun getIconForBuildingType(type: BuildingType): Int {
-        return when (type) {
-            BuildingType.ACADEMIC -> R.drawable.ic_school
-            BuildingType.LIBRARY -> R.drawable.ic_library
-            BuildingType.CAFETERIA -> R.drawable.ic_restaurant
-            BuildingType.SPORTS -> R.drawable.ic_sports
-            BuildingType.ADMINISTRATIVE -> R.drawable.ic_business
-            BuildingType.LANDMARK -> R.drawable.ic_landmark
-        }
     }
 
     private fun formatDistance(meters: Double): String {
@@ -617,6 +1078,8 @@ class MapFragment : Fragment() {
             myLocationOverlay?.let { mapView.overlays.remove(it); mapView.overlays.add(it) }
             buildingMarkers.forEach { marker -> mapView.overlays.remove(marker); mapView.overlays.add(marker) }
 
+            binding.fabSatellite.setImageResource(R.drawable.ic_map)
+
             Toast.makeText(requireContext(), "Satellite View", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             viewModel.setSatelliteView(false)
@@ -632,10 +1095,12 @@ class MapFragment : Fragment() {
         mapView.setTileSource(TileSourceFactory.MAPNIK)
         campusPathsOverlay.clearPaths(mapView)
         if (isDarkMode) applyDarkModeFilter() else mapView.overlayManager.tilesOverlay.setColorFilter(null)
+
+        binding.fabSatellite.setImageResource(R.drawable.ic_satellite)
     }
 
     private fun startCompassMode() {
-        binding.fabCompass.imageTintList = ColorStateList.valueOf(ContextCompat.getColor(requireContext(), R.color.map_blue))
+        binding.fabCompass.imageTintList = ColorStateList.valueOf(ContextCompat.getColor(requireContext(), R.color.primary_green))
         binding.fabCompass.setImageResource(R.drawable.ic_compass)
         Toast.makeText(requireContext(), "Compass Mode: On", Toast.LENGTH_SHORT).show()
 
@@ -663,6 +1128,10 @@ class MapFragment : Fragment() {
         mapView.onResume()
         if (myLocationOverlay == null && hasLocationPermission()) setupLocationOverlay()
         myLocationOverlay?.enableMyLocation()
+        mainActivity?.setBottomNavVisibility(false)
+
+        updatePOIMarkers()
+        updateGeofencePolygons()
 
         if (viewModel.navigationState.value is NavigationState.Navigating) {
             val hideIntent = Intent(requireContext(), NavigationService::class.java).apply {
@@ -690,6 +1159,52 @@ class MapFragment : Fragment() {
         super.onDestroyView()
         campusPathsOverlay.clearPaths(mapView)
         mapView.onDetach()
+        etMapSearch = null
+        btnMapClear = null
+        searchDropdown = null
+        rvMapSearchResults = null
         _binding = null
+    }
+
+    // --- HELPER FUNCTIONS ---
+
+    private fun getIconForBuildingType(type: BuildingType): Int {
+        return when (type) {
+            BuildingType.ACADEMIC -> R.drawable.ic_school
+            BuildingType.LIBRARY -> R.drawable.ic_library
+            BuildingType.CAFETERIA -> R.drawable.ic_restaurant
+            BuildingType.SPORTS -> R.drawable.ic_sports
+            BuildingType.ADMINISTRATIVE -> R.drawable.ic_business
+            BuildingType.LANDMARK -> R.drawable.ic_landmark
+        }
+    }
+
+    private fun getIconForMarkerType(iconType: String): Int {
+        return when (iconType.uppercase()) {
+            "ENTRANCE" -> R.drawable.ic_landmark
+            "ATM" -> R.drawable.ic_business
+            "RESTROOM" -> R.drawable.ic_landmark
+            "PARKING" -> R.drawable.ic_landmark
+            "INFO" -> R.drawable.ic_business
+            "FOOD" -> R.drawable.ic_restaurant
+            "LIBRARY" -> R.drawable.ic_library
+            "LAB" -> R.drawable.ic_school
+            "OFFICE" -> R.drawable.ic_business
+            else -> R.drawable.ic_landmark
+        }
+    }
+
+    private fun getDirectionIcon(direction: Direction): Int {
+        return when (direction) {
+            Direction.FORWARD -> R.drawable.ic_arrow_up
+            Direction.LEFT -> R.drawable.ic_turn_left
+            Direction.SLIGHT_LEFT -> R.drawable.ic_turn_slight_left
+            Direction.SHARP_LEFT -> R.drawable.ic_turn_sharp_left
+            Direction.RIGHT -> R.drawable.ic_turn_right
+            Direction.SLIGHT_RIGHT -> R.drawable.ic_turn_slight_right
+            Direction.SHARP_RIGHT -> R.drawable.ic_turn_sharp_right
+            Direction.U_TURN -> R.drawable.ic_u_turn
+            Direction.ARRIVE -> R.drawable.ic_destination
+        }
     }
 }
