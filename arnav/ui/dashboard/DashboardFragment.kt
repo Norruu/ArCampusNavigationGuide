@@ -230,12 +230,35 @@ class DashboardFragment : Fragment() {
         val tvName = sheetView.findViewById<TextView>(R.id.tvDetailName)
         val tvDesc = sheetView.findViewById<TextView>(R.id.tvDetailDescription)
         val tvNavName = sheetView.findViewById<TextView>(R.id.tvNavigateToName)
+        val ivDetailImage = sheetView.findViewById<ImageView>(R.id.ivDetailImage) // NEW: Find the ImageView
         val btnNo = sheetView.findViewById<View>(R.id.btnNo)
         val btnYes = sheetView.findViewById<View>(R.id.btnYes)
 
         tvName?.text = building.name
         tvDesc?.text = building.description ?: "No description available"
         tvNavName?.text = "${building.name}?"
+
+        // --- NEW: Load Hardcoded Local Image ---
+        if (ivDetailImage != null) {
+            val formattedName = building.name
+                .lowercase()
+                .replace(" ", "_")
+                .replace(Regex("[^a-z0-9_]"), "")
+
+            val context = requireContext()
+            val resourceId = context.resources.getIdentifier(
+                formattedName,
+                "drawable",
+                context.packageName
+            )
+
+            if (resourceId != 0) {
+                ivDetailImage.setImageResource(resourceId)
+            } else {
+                ivDetailImage.setImageResource(R.drawable.bg_topographic) // Fallback
+            }
+        }
+        // ---------------------------------------
 
         btnNo?.setOnClickListener { dialog.dismiss() }
 

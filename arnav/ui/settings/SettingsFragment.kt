@@ -27,11 +27,13 @@ class SettingsFragment : Fragment() {
 
     // Add your tutorial drawable images here
     private val tutorialImages = listOf(
-        R.drawable.ryan, // Replace with R.drawable.tutorial_1
-        R.drawable.robel,
-        R.drawable.rona,
-        R.drawable.roan,
-        R.drawable.anika,
+        R.drawable.slide_01_dashboard,
+        R.drawable.slide_02_detail,
+        R.drawable.slide_03_map,
+        R.drawable.slide_04_navpanel,
+        R.drawable.slide_ar_activation,
+        R.drawable.slide_05_ar,
+        R.drawable.slide_06_settings,
     )
     private var currentTutorialIndex = 0
 

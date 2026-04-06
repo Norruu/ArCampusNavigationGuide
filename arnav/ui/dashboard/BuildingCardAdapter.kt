@@ -26,12 +26,30 @@ class BuildingCardAdapter(
             tvDesc.text = building.description ?: building.shortName
             tvType.text = building.type.name
 
-            if (building.imageUrl != null) {
-                // If you have Glide/Coil:
-                // Glide.with(ivImage).load(building.imageUrl).into(ivImage)
-                ivImage.setImageResource(R.drawable.bg_topographic)
+            // 1. Format the building name to match Android's drawable rules
+            // This takes "Main Library!" and turns it into "main_library"
+            val formattedName = building.name
+                .lowercase()
+                .replace(" ", "_")
+                .replace(Regex("[^a-z0-9_]"), "")
+
+            val context = itemView.context
+
+            // 2. Ask Android to find a drawable with that exact formatted name
+            val resourceId = context.resources.getIdentifier(
+                formattedName,
+                "drawable",
+                context.packageName
+            )
+
+            // 3. If it found a match (resourceId != 0), show the photo!
+            // Otherwise, fall back to your default topographic background.
+            if (resourceId != 0) {
+                ivImage.setImageResource(resourceId)
+                ivImage.scaleType = ImageView.ScaleType.CENTER_CROP // Makes it fill the card nicely
             } else {
                 ivImage.setImageResource(R.drawable.bg_topographic)
+                ivImage.scaleType = ImageView.ScaleType.CENTER_CROP
             }
 
             itemView.setOnClickListener { onBuildingClick(building) }

@@ -30,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.campus.arnav.ui.map.MapFragment
+import com.campus.arnav.util.FirestoreSyncManager
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -38,6 +39,8 @@ class MainActivity : AppCompatActivity() {
     @Inject lateinit var campusPathfinding: CampusPathfinding
     @Inject lateinit var campusRepository: CampusRepository
     @Inject lateinit var pathfindingEngine: PathfindingEngine
+
+    @Inject lateinit var firestoreSyncManager: FirestoreSyncManager
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var navController: NavController
@@ -108,6 +111,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         super.onCreate(savedInstanceState)
+
+        firestoreSyncManager.startSync()
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)

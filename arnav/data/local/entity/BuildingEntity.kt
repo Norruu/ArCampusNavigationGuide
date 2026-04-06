@@ -21,10 +21,9 @@ data class BuildingEntity(
     val type: String,
     val isAccessible: Boolean,
     val imageUrl: String?,
-    val entrancesJson: String = "[]"  // NEW: stores entrances as JSON string
+    val entrancesJson: String = "[]"
 ) {
     fun toBuilding(): Building {
-        // Parse entrances from JSON
         val entrances: List<CampusLocation> = try {
             val type = object : TypeToken<List<EntranceJson>>() {}.type
             val parsed: List<EntranceJson> = Gson().fromJson(entrancesJson, type)

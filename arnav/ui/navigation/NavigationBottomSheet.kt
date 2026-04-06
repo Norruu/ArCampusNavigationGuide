@@ -299,8 +299,17 @@ class NavigationBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun launchARNavigation(route: Route) {
+        val destination = viewModel.destination.value
+        val target = destination?.location ?: route.waypoints.lastOrNull()?.location ?: return
+
+        val points = route.waypoints.map { it.location }
+
         val intent = Intent(requireContext(), ARNavigationActivity::class.java).apply {
-            putExtra(ARNavigationActivity.EXTRA_ROUTE, route)
+            putExtra("TARGET_LAT", target.latitude)
+            putExtra("TARGET_LON", target.longitude)
+            putExtra("TARGET_NAME", destination?.name ?: "Destination")
+            putExtra("ROUTE_LATS", points.map { it.latitude }.toDoubleArray())
+            putExtra("ROUTE_LONS", points.map { it.longitude }.toDoubleArray())
         }
         startActivity(intent)
     }

@@ -650,7 +650,7 @@ object CampusDataProvider {
             )
         ),
         Building(
-            id = "Bh",
+            id = "bh",
             name = "Boarding House",
             shortName = "Boarding House",
             description = "Boarding House",
